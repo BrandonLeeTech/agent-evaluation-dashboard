@@ -19,20 +19,20 @@ class TestServer(unittest.TestCase):
         result = resolve_repo_path(".")
         self.assertIsNotNone(result)
         self.assertTrue(Path(result).exists())
-    
+
     def test_structured_content_with_json(self):
         """Test structured content extraction from JSON"""
         mock_result = {"content": [{"type": "text", "text": "{\"data\": \"test\"}"}]}
         result = structured_content(mock_result)
         self.assertIsInstance(result, dict)
         self.assertIn("data", result)
-    
+
     def test_structured_content_direct(self):
         """Test structured content when already structured"""
         mock_result = {"structuredContent": {"test": "data"}}
         result = structured_content(mock_result)
         self.assertEqual(result, {"test": "data"})
-    
+
     def test_calculate_metrics(self):
         """Test metrics calculation"""
         results = [
