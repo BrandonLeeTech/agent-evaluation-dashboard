@@ -26,10 +26,24 @@ Created the initial documentation foundation to prepare for code refactoring and
 
 ## 🎯 Next Steps / Backlog
 
-### Next Task: Phase 2 - Frontend Refactoring (ES Modules)
-- Split `frontend/app.js` into three separate modules under `frontend/js/`:
-  - `api.js` (Server/API communication helper)
-  - `benchmarks.js` (Simulated evaluation configurations & metric calculations)
-  - `ui.js` (DOM interactions, updates, and charts)
-- Update `frontend/index.html` to load them using native ES modules (`type="module"`).
-- Verify simulated runs still work in static mode and MCP connectivity works in server mode.
+### Summary of Changes (Phase 2)
+Refactored the monolithic `frontend/app.js` (~600 lines) into native ES Modules, separating concern domains (API, data/benchmarks, UI rendering) and enabling lightweight modifications in subsequent steps.
+
+### Added / Modified Files
+- **[`frontend/index.html`](file:///Users/brandonlee/dev/Agent_Evaluation_Dashboard/frontend/index.html)**: Changed script loader to `type="module"`.
+- **[`frontend/app.js`](file:///Users/brandonlee/dev/Agent_Evaluation_Dashboard/frontend/app.js)**: Rewritten as a clean orchestration entry point.
+- **[`frontend/js/api.js`](file:///Users/brandonlee/dev/Agent_Evaluation_Dashboard/frontend/js/api.js)**: New API module.
+- **[`frontend/js/benchmarks.js`](file:///Users/brandonlee/dev/Agent_Evaluation_Dashboard/frontend/js/benchmarks.js)**: New data and simulation module.
+- **[`frontend/js/ui.js`](file:///Users/brandonlee/dev/Agent_Evaluation_Dashboard/frontend/js/ui.js)**: New DOM and rendering module.
+
+### Verification Results
+- All unit tests pass: `python3 -m unittest tests/test_server.py tests/test_mcp_client.py`
+- Manual inspection confirms simulated runs, local storage persistence, and MCP tools render correctly.
+
+---
+
+## 🎯 Next Steps / Backlog
+
+### Next Task: Phase 3 - Frontend Safety & UX Enhancements
+- Implement HTML sanitization in `frontend/js/ui.js` when rendering stdout/file contents from MCP tools to prevent XSS.
+- Add try-catch fallback handling or error bounds around DOM operations and network calls in UI.
