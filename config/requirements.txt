@@ -1,0 +1,19 @@
+# 檔案用途：Python 依賴套件清單
+# 功能：定義專案所需的 Python 套件（目前為空，僅使用標準庫）
+
+# Agent Evaluation Dashboard
+# MVP Version - Python 3.8+ Standard Library Only
+
+# Core Dependencies: None (uses Python standard library)
+# - http.server for HTTP server
+# - json, subprocess, threading for MCP client
+# - pathlib for file operations
+
+# Development Dependencies (optional):
+# pytest>=7.4.0           # For running tests
+# pytest-cov>=4.1.0       # For test coverage reports
+
+# Notes:
+# - This is an MVP project with zero external runtime dependencies
+# - All functionality uses Python standard library
+# - For development/testing, install: pip install pytest pytest-cov

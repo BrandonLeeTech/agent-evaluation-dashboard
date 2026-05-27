@@ -1,0 +1,207 @@
+# Cursor AI Rules for Agent Evaluation Dashboard
+
+## Project Context
+
+Agent Evaluation Dashboard — MVP for testing AI workflow reliability.
+
+Stack: Vanilla JS + Python + MCP integration
+Purpose: Measure AI agent performance (success rate, latency, tokens)
+
+## Critical Rules
+
+### 1. Token Efficiency (HIGHEST PRIORITY)
+
+- NEVER read entire files unless absolutely necessary
+- ALWAYS use read_file(offset=X, limit=Y) to read specific sections
+- ALWAYS use search_files() to locate code before reading
+- NEVER paste full file contents in chat
+- Use patch() for targeted edits, not full rewrites
+
+### 2. Code Style
+
+**Python:**
+- PEP 8, 4-space indent
+- Type hints optional
+- Validate all user inputs
+- Return structured JSON: `{"error": "msg"}` or `{"result": ...}`
+
+**JavaScript:**
+- 2-space indent, camelCase
+- No semicolons (ASI)
+- Vanilla ES6+ (no build step)
+- Avoid frameworks (keep it simple)
+
+**JSON:**
+- 2-space indent
+- No trailing commas
+
+### 3. File Organization
+
+```
+frontend/index.html               → UI structure
+frontend/app.js                   → Frontend logic
+frontend/styles.css               → Styling
+backend/server.py                 → HTTP + MCP client
+backend/mcp_servers/*.py          → MCP server tools
+config/mcp.config.json            → MCP config
+```
+
+### 4. MCP Development
+
+**Adding a tool:**
+```python
+def tool_name(arguments):
+    # 1. Validate
+    param = arguments.get("param")
+    if not param:
+        raise ValueError("param is required")
+    
+    # 2. Work
+    result = {"data": "..."}
+    
+    # 3. Return MCP format
+    return tool_result(result)
+```
+
+**Register in tools/list handler**
+
+### 5. API Development
+
+**Adding an endpoint:**
+```python
+# In backend/server.py DashboardHandler.do_POST()
+if parsed.path == "/api/endpoint":
+    data = body.get("key")
+    result = process(data)
+    self.send_json(result)
+    return
+```
+
+### 6. Security
+
+- ✅ Always use `safe_path()` for file paths
+- ✅ Use `subprocess.run([...])`, never `os.system()`
+- ✅ Validate JSON inputs
+- ❌ Never trust user input directly
+
+### 7. Testing
+
+**Before committing:**
+1. Test static mode: `open frontend/index.html`
+2. Test MCP mode: `python3 backend/server.py` → open http://127.0.0.1:5173
+3. Check browser console (no errors)
+4. Check terminal (no exceptions)
+
+### 8. Error Handling
+
+- Always return structured errors
+- Log to stderr for debugging
+- MCP errors: raise ValueError/RuntimeError
+- API errors: `self.send_json({"error": "msg"}, status=500)`
+
+### 9. Comments
+
+- Explain WHY, not WHAT
+- Document edge cases
+- No obvious comments like `# Set x to 5`
+
+### 10. MVP Mindset
+
+- ✅ Simple > Complex
+- ✅ Working > Perfect
+- ✅ Fast iteration > Over-engineering
+- ❌ Don't add features not requested
+- ❌ Don't refactor working code without reason
+
+## Common Tasks
+
+### Locate Code
+```python
+search_files(pattern="function runBenchmark", target="content")
+```
+
+### Read Specific Section
+```python
+read_file(path="frontend/app.js", offset=150, limit=50)
+```
+
+### Edit Code
+```python
+patch(
+    path="backend/server.py",
+    old_string="timeout=10",
+    new_string="timeout=30"
+)
+```
+
+### Debug MCP
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | \
+  python3 backend/mcp_servers/local_repo_server.py
+```
+
+## Architecture Constraints
+
+- No build step (keep it that way)
+- No database (localStorage is fine)
+- No authentication (local dev only)
+- No frameworks (vanilla JS)
+
+## Token Budget
+
+Target: <1000 tokens per task
+Max: 2000 tokens per task
+Emergency: Use execute_code() or delegate_task() if exceeding
+
+## When to Push Back
+
+❌ "Add React" → Not needed for MVP
+❌ "Rewrite everything" → Incremental changes only
+❌ "Add database" → localStorage works
+❌ "Add tests" → Manual testing is fine for now
+
+## File Read Strategy
+
+**Good:**
+```python
+# Step 1: Find it
+search_files(pattern="MCPRegistry")
+
+# Step 2: Read narrow context
+read_file(path="backend/server.py", offset=148, limit=30)
+
+# Step 3: Edit precisely
+patch(path="backend/server.py", old_string="...", new_string="...")
+```
+
+**Bad:**
+```python
+# DON'T DO THIS
+read_file(path="backend/server.py")  # Reads entire file → wastes tokens
+```
+
+## Questions Before Acting
+
+1. Can I point to exact file/line?
+2. Do I need to see the whole file? (Usually no)
+3. Is this the minimal change? (Yes → proceed)
+4. Will this break existing features? (If yes → reconsider)
+
+## Reference Docs
+
+- See CLAUDE.md for detailed context
+- See AGENTS.md for architecture details
+- See README.md for user instructions
+
+## Success Checklist
+
+- ✅ Works in browser
+- ✅ No console errors
+- ✅ Code style matches project
+- ✅ Token usage reasonable
+- ✅ Change is minimal
+- ✅ Tested manually
+
+---
+
+Follow these rules strictly to maintain code quality and token efficiency.

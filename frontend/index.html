@@ -1,0 +1,264 @@
+<!-- 
+  檔案用途：Agent 評估儀表板的主要 HTML 介面
+  功能：提供使用者介面，包含模擬評估和 MCP 連接功能
+  模式：可獨立開啟（靜態模式）或透過 server.py 執行（MCP 模式）
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Agent Evaluation Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">AE</div>
+          <div>
+            <h1>Agent Evaluation</h1>
+            <p>Reliability Dashboard</p>
+          </div>
+        </div>
+
+        <section class="control-group">
+          <h2>Evaluation Target</h2>
+          <label for="workflowSelect">Workflow</label>
+          <select id="workflowSelect">
+            <option value="testcase">Testcase Generator</option>
+            <option value="qaFallback">QA Workflow + Fallback</option>
+            <option value="agent">Task Agent</option>
+          </select>
+
+          <label for="promptSelect">Prompt Version</label>
+          <select id="promptSelect">
+            <option value="v1">Prompt v1</option>
+            <option value="v2">Prompt v2</option>
+            <option value="v3">Prompt v3</option>
+          </select>
+
+          <label for="modelSelect">Model Preset</label>
+          <select id="modelSelect">
+            <option value="local">Local Small</option>
+            <option value="mini">Cloud Mini</option>
+            <option value="reasoning">Cloud Reasoning</option>
+          </select>
+        </section>
+
+        <section class="control-group">
+          <h2>Quality Gates</h2>
+          <div class="toggle-row">
+            <div>
+              <span>Fallback</span>
+              <small>Recovery path</small>
+            </div>
+            <label class="switch">
+              <input id="fallbackToggle" type="checkbox" checked>
+              <span></span>
+            </label>
+          </div>
+
+          <div class="toggle-row">
+            <div>
+              <span>Strict Judge</span>
+              <small>Higher pass bar</small>
+            </div>
+            <label class="switch">
+              <input id="judgeToggle" type="checkbox">
+              <span></span>
+            </label>
+          </div>
+
+          <label for="thresholdInput">Regression Gate</label>
+          <input id="thresholdInput" type="number" min="50" max="99" value="80">
+        </section>
+
+        <section class="control-group">
+          <h2>Benchmark Scope</h2>
+          <div class="checkbox-row">
+            <label><input type="checkbox" name="category" value="requirements" checked> Requirements</label>
+            <label><input type="checkbox" name="category" value="api" checked> API</label>
+            <label><input type="checkbox" name="category" value="ui" checked> UI</label>
+            <label><input type="checkbox" name="category" value="agent" checked> Agent</label>
+          </div>
+        </section>
+
+        <section class="control-group">
+          <h2>MCP Connector</h2>
+          <label for="mcpServerSelect">Server</label>
+          <select id="mcpServerSelect">
+            <option value="local-repo">local-repo</option>
+          </select>
+          <label for="mcpRepoPathInput">Repo Path</label>
+          <input id="mcpRepoPathInput" type="text" value="." placeholder="/Users/name/dev/project">
+          <div class="connector-status">
+            <span id="mcpStatusDot" class="status-dot"></span>
+            <span id="mcpStatusText">Checking backend</span>
+          </div>
+          <button id="mcpConnectButton" class="ghost-button" type="button">
+            <span class="button-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M7 7h10v3h2V5H5v5h2zm10 10H7v-3H5v5h14v-5h-2zM8 13h8v-2H8z"></path>
+              </svg>
+            </span>
+            Connect MCP
+          </button>
+          <button id="mcpRepoScanButton" class="ghost-button" type="button">
+            <span class="button-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M10 3h4v2h-4zm-4 4h12v13H6zm2 2v9h8V9zm2 2h4v2h-4zm0 3h4v2h-4z"></path>
+              </svg>
+            </span>
+            Run Repo Scan
+          </button>
+        </section>
+
+        <div class="action-stack">
+          <button id="runButton" class="primary-button" type="button">
+            <span class="button-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M8 5v14l11-7z"></path>
+              </svg>
+            </span>
+            Run Benchmark
+          </button>
+          <button id="compareButton" class="ghost-button" type="button">
+            <span class="button-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M5 7h14v2H5zm0 4h10v2H5zm0 4h14v2H5z"></path>
+              </svg>
+            </span>
+            Compare v1/v2
+          </button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">AI Quality Governance</p>
+            <h2>Agent Evaluation Dashboard</h2>
+          </div>
+          <div class="run-state">
+            <span id="runStatus" class="status-pill">Ready</span>
+            <button id="resetButton" class="icon-button" type="button" title="Reset history" aria-label="Reset history">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M12 5a7 7 0 1 1-6.3 4H3.6A9 9 0 1 0 6 5.4V3H4v6h6V7H7.3A7 7 0 0 1 12 5z"></path>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <section class="metric-grid" aria-label="Current run metrics">
+          <article class="metric-card">
+            <span>Success Rate</span>
+            <strong id="successMetric">--</strong>
+            <div class="meter"><span id="successMeter"></span></div>
+          </article>
+          <article class="metric-card">
+            <span>Hallucination</span>
+            <strong id="hallucinationMetric">--</strong>
+            <div class="meter danger"><span id="hallucinationMeter"></span></div>
+          </article>
+          <article class="metric-card">
+            <span>Avg Latency</span>
+            <strong id="latencyMetric">--</strong>
+            <div class="metric-note" id="latencyNote">No run yet</div>
+          </article>
+          <article class="metric-card">
+            <span>Token Cost</span>
+            <strong id="costMetric">--</strong>
+            <div class="metric-note" id="tokenNote">0 tokens</div>
+          </article>
+        </section>
+
+        <section class="content-grid">
+          <article class="panel run-panel">
+            <div class="panel-header">
+              <div>
+                <h3>Run Results</h3>
+                <p id="runMeta">No benchmark run selected</p>
+              </div>
+              <span id="gateBadge" class="gate-badge neutral">No Gate</span>
+            </div>
+            <div id="resultList" class="result-list empty-state">
+              <div class="empty-copy">
+                <strong>No run data</strong>
+                <span>Awaiting task-level evaluation.</span>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <h3>Failure Analysis</h3>
+                <p id="failureMeta">Current run</p>
+              </div>
+            </div>
+            <div id="failureList" class="analysis-list">
+              <div class="empty-copy">
+                <strong>No failures</strong>
+                <span>Awaiting failure categories.</span>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel mcp-panel">
+          <div class="panel-header">
+            <div>
+              <h3>MCP Tools</h3>
+              <p id="mcpMeta">No MCP session</p>
+            </div>
+            <span id="mcpBadge" class="gate-badge neutral">Offline</span>
+          </div>
+          <div class="mcp-grid">
+            <div>
+              <h4>Available Tools</h4>
+              <div id="mcpToolsList" class="tool-list">
+                <div class="empty-copy">
+                  <strong>No tools</strong>
+                  <span>Awaiting MCP connection.</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <h4>Latest Evidence</h4>
+              <pre id="mcpOutput" class="mcp-output">No MCP evidence captured.</pre>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel history-panel">
+          <div class="panel-header">
+            <div>
+              <h3>Run History</h3>
+              <p id="historyMeta">Stored in this browser</p>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Workflow</th>
+                  <th>Model</th>
+                  <th>Success</th>
+                  <th>Hallucination</th>
+                  <th>Fallback</th>
+                  <th>Cost</th>
+                  <th>Gate</th>
+                </tr>
+              </thead>
+              <tbody id="historyTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>

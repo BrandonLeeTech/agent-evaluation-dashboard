@@ -1,0 +1,15 @@
+{
+  "_comment": "檔案用途：MCP 伺服器配置檔 | 功能：定義可用的 MCP 伺服器、啟動命令、環境變數",
+  "defaultServer": "local-repo",
+  "servers": {
+    "local-repo": {
+      "command": "python3",
+      "args": [
+        "backend/mcp_servers/local_repo_server.py"
+      ],
+      "env": {
+        "MCP_REPO_ROOT": "."
+      }
+    }
+  }
+}
