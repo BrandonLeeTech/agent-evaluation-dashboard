@@ -1,7 +1,11 @@
 #!/bin/bash
 
-# 檔案用途：快速測試腳本
-# 功能：驗證新結構的語法和基本功能
+# 檔案用途：快速 smoke test 腳本
+# 功能：驗證專案結構、語法和基本檔案是否完整
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$ROOT_DIR" || exit 1
 
 echo "🧪 測試新專案結構..."
 echo ""
@@ -45,10 +49,10 @@ for file in README.md AGENTS.md CLAUDE.md CONTRIBUTING.md docs/ARCHITECTURE.md; 
     fi
 done
 
-# 測試啟動腳本
+# 測試啟動與 smoke test 腳本
 echo ""
 echo "5️⃣  檢查腳本..."
-for file in start.sh test-structure.sh; do
+for file in start.sh smoke-tests/check-structure.sh; do
     if [ -x "$file" ]; then
         echo "   ✅ $file (可執行)"
     elif [ -f "$file" ]; then

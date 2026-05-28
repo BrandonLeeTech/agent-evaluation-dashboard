@@ -36,14 +36,16 @@ Agent_Evaluation_Dashboard/
 │   ├── test_server.py
 │   └── test_mcp_client.py
 │
+├── smoke-tests/          # 手動 smoke tests
+│   └── check-structure.sh # 結構檢查
+│
 ├── .github/workflows/    # CI/CD 配置
 │   └── ci.yml            # GitHub Actions 自動測試
 │
 ├── AGENTS.md             # AI Agent 協作指南
 ├── CLAUDE.md             # Claude 協作指南
 ├── CONTRIBUTING.md       # 貢獻指南
-├── start.sh              # 快速啟動
-└── test-structure.sh     # 結構檢查
+└── start.sh              # 快速啟動
 ```
 
 ---

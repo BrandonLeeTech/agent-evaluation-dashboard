@@ -61,7 +61,8 @@ Agent_Evaluation_Dashboard/
 ├── 📄 .gitignore                   # Git 忽略清單
 │
 ├── 🔧 start.sh                     # 快速啟動伺服器
-└── 🔧 test-structure.sh            # 驗證新結構
+└── 📁 smoke-tests/
+    └── 🔧 check-structure.sh       # 驗證新結構
 ```
 
 ---
@@ -304,7 +305,7 @@ backend/server.py
    - pytest 單元測試
    - 伺服器啟動測試
 
-3. **結構測試** (`test-structure.sh`)
+3. **結構測試** (`smoke-tests/check-structure.sh`)
    - 檔案存在性
    - Python 語法
    - 配置檔案格式
