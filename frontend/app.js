@@ -15,7 +15,8 @@ import {
   setMcpStatus,
   renderMcpTools,
   renderMcpEvidence,
-  renderCurrentRun
+  renderCurrentRun,
+  showGlobalErrorBanner
 } from './js/ui.js';
 
 // 初始化全域狀態
@@ -148,3 +149,27 @@ els.historyTable.addEventListener("click", (event) => {
 // 初始化頁面內容
 renderCurrentRun(selectedRunId, runs);
 loadMcpStatus();
+
+/**
+ * 全域非預期錯誤攔截：
+ * 當頁面上任何未被 try-catch 捕獲的 JS 錯誤或 Promise rejection 發生時，
+ * 顯示錯誤復原橫幅，並提供一鍵清除 localStorage 的修復功能。
+ */
+function handleGlobalRecovery() {
+  runs = [];
+  selectedRunId = null;
+  saveRuns(runs);
+  renderCurrentRun(selectedRunId, runs);
+  setRunStatus('Ready', '');
+  location.reload();
+}
+
+window.addEventListener('error', (event) => {
+  const message = event.message || 'An unexpected JavaScript error occurred.';
+  showGlobalErrorBanner(`${message}`, handleGlobalRecovery);
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  const message = event.reason?.message || String(event.reason) || 'An unhandled promise rejection occurred.';
+  showGlobalErrorBanner(`${message}`, handleGlobalRecovery);
+});

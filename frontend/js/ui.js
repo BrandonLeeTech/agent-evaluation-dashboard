@@ -4,7 +4,8 @@
  *   - 集中管理 DOM 元素選取器
  *   - 處理日期、成本格式化與 HTML 消毒防護 (XSS)
  *   - 更新 MCP 與評估執行的 UI 狀態狀態列
- *   - 渲染評估列表、失敗分析與歷史紀錄表格
+ *   - 渲染評估列表、失敗分析與歷史紀錄表格 (包含 try-catch 防禦性渲染)
+ *   - 提供全域錯誤復原橫幅 UI
  */
 
 import { workflowProfiles, promptProfiles, modelProfiles } from './benchmarks.js';
@@ -59,16 +60,21 @@ export function escapeHtml(value) {
 
 // 格式化日期時間
 export function formatDate(iso) {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(iso));
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(iso));
+  } catch {
+    return "Invalid Date";
+  }
 }
 
 // 格式化費用
 export function formatCost(cost) {
+  if (typeof cost !== 'number') return "$0.00000";
   if (cost === 0) return "$0.00000";
   return `$${cost.toFixed(5)}`;
 }
@@ -164,29 +170,39 @@ export function renderResultRow(result) {
 
 // 渲染失敗項目原因分析
 export function renderFailureAnalysis(run) {
-  const failures = run.results.filter((result) => !result.passed);
-  if (!failures.length) {
+  try {
+    const failures = run.results.filter((result) => !result.passed);
+    if (!failures.length) {
+      els.failureList.innerHTML = `
+        <div class="empty-copy">
+          <strong>No failures</strong>
+          <span>All selected benchmark tasks passed.</span>
+        </div>
+      `;
+      return;
+    }
+
+    els.failureList.innerHTML = failures.map((failure) => {
+      const severity = failure.hallucinated ? "high" : failure.score < 0.62 ? "medium" : "low";
+      return `
+        <div class="analysis-item">
+          <header>
+            <span>${escapeHtml(failure.reason)}</span>
+            <span class="severity-${severity}">${severity}</span>
+          </header>
+          <p>${escapeHtml(failure.taskId)}: ${escapeHtml(failure.risk)}. Score ${Math.round(failure.score * 100)}%, fallback ${failure.fallbackTriggered ? "triggered" : "not triggered"}.</p>
+        </div>
+      `;
+    }).join("");
+  } catch (error) {
+    console.error("Failed to render failure analysis:", error);
     els.failureList.innerHTML = `
       <div class="empty-copy">
-        <strong>No failures</strong>
-        <span>All selected benchmark tasks passed.</span>
+        <strong style="color: var(--status-fail);">Analysis Error</strong>
+        <span>Unable to process failure reports.</span>
       </div>
     `;
-    return;
   }
-
-  els.failureList.innerHTML = failures.map((failure) => {
-    const severity = failure.hallucinated ? "high" : failure.score < 0.62 ? "medium" : "low";
-    return `
-      <div class="analysis-item">
-        <header>
-          <span>${escapeHtml(failure.reason)}</span>
-          <span class="severity-${severity}">${severity}</span>
-        </header>
-        <p>${escapeHtml(failure.taskId)}: ${escapeHtml(failure.risk)}. Score ${Math.round(failure.score * 100)}%, fallback ${failure.fallbackTriggered ? "triggered" : "not triggered"}.</p>
-      </div>
-    `;
-  }).join("");
 }
 
 // 獲取目前畫面上勾選的測試類別
@@ -240,61 +256,203 @@ export function renderEmptyState() {
 
 // 渲染當前選定的評估執行詳細資料與歷程
 export function renderCurrentRun(selectedRunId, runs) {
-  const run = runs.find((item) => item.id === selectedRunId);
-  if (!run) {
-    renderEmptyState();
+  try {
+    const run = runs.find((item) => item.id === selectedRunId);
+    if (!run) {
+      renderEmptyState();
+      renderHistory(runs, selectedRunId);
+      return;
+    }
+
+    const { metrics, config } = run;
+    els.successMetric.textContent = `${metrics.successRate}%`;
+    els.hallucinationMetric.textContent = `${metrics.hallucinationRate}%`;
+    els.latencyMetric.textContent = `${(metrics.avgLatency / 1000).toFixed(2)}s`;
+    els.costMetric.textContent = formatCost(metrics.cost);
+    els.successMeter.style.width = `${metrics.successRate}%`;
+    els.hallucinationMeter.style.width = `${metrics.hallucinationRate}%`;
+    els.latencyNote.textContent = `${metrics.passed}/${metrics.total} tasks passed`;
+    els.tokenNote.textContent = `${metrics.tokens.toLocaleString()} tokens`;
+    els.runMeta.textContent = `${getWorkflowLabel(config.workflow)} · ${getPromptLabel(config.prompt)} · ${getModelLabel(config.model)}`;
+    els.failureMeta.textContent = `${metrics.failed} failed · ${metrics.fallbackRate}% fallback`;
+
+    els.gateBadge.textContent = metrics.gatePassed ? "Gate Passed" : "Gate Failed";
+    els.gateBadge.className = `gate-badge ${metrics.gatePassed ? "pass" : "fail"}`;
+
+    els.resultList.className = "result-list";
+    els.resultList.innerHTML = run.results.map(renderResultRow).join("");
+    renderFailureAnalysis(run);
     renderHistory(runs, selectedRunId);
-    return;
+  } catch (error) {
+    console.error("Failed to render current run:", error);
+    els.resultList.className = "result-list empty-state";
+    els.resultList.innerHTML = `
+      <div class="empty-copy">
+        <strong style="color: var(--status-fail);">Rendering Error</strong>
+        <span>This run dataset may be corrupted. (${escapeHtml(error.message)})</span>
+      </div>
+    `;
+    renderHistory(runs, selectedRunId);
   }
-
-  const { metrics, config } = run;
-  els.successMetric.textContent = `${metrics.successRate}%`;
-  els.hallucinationMetric.textContent = `${metrics.hallucinationRate}%`;
-  els.latencyMetric.textContent = `${(metrics.avgLatency / 1000).toFixed(2)}s`;
-  els.costMetric.textContent = formatCost(metrics.cost);
-  els.successMeter.style.width = `${metrics.successRate}%`;
-  els.hallucinationMeter.style.width = `${metrics.hallucinationRate}%`;
-  els.latencyNote.textContent = `${metrics.passed}/${metrics.total} tasks passed`;
-  els.tokenNote.textContent = `${metrics.tokens.toLocaleString()} tokens`;
-  els.runMeta.textContent = `${getWorkflowLabel(config.workflow)} · ${getPromptLabel(config.prompt)} · ${getModelLabel(config.model)}`;
-  els.failureMeta.textContent = `${metrics.failed} failed · ${metrics.fallbackRate}% fallback`;
-
-  els.gateBadge.textContent = metrics.gatePassed ? "Gate Passed" : "Gate Failed";
-  els.gateBadge.className = `gate-badge ${metrics.gatePassed ? "pass" : "fail"}`;
-
-  els.resultList.className = "result-list";
-  els.resultList.innerHTML = run.results.map(renderResultRow).join("");
-  renderFailureAnalysis(run);
-  renderHistory(runs, selectedRunId);
 }
 
 // 渲染歷史執行列表表格
 export function renderHistory(runs, selectedRunId) {
-  els.historyMeta.textContent = `${runs.length} saved runs`;
-  if (!runs.length) {
+  try {
+    els.historyMeta.textContent = `${runs.length} saved runs`;
+    if (!runs.length) {
+      els.historyTable.innerHTML = `
+        <tr>
+          <td colspan="8">No saved benchmark runs.</td>
+        </tr>
+      `;
+      return;
+    }
+
+    els.historyTable.innerHTML = runs.map((run) => {
+      const workflow = escapeHtml(getWorkflowLabel(run.config?.workflow));
+      const model = escapeHtml(getModelLabel(run.config?.model));
+      const selected = run.id === selectedRunId ? "selected" : "";
+      return `
+        <tr class="${selected}" data-run-id="${run.id}">
+          <td>${formatDate(run.createdAt)}</td>
+          <td>${workflow}</td>
+          <td>${model}</td>
+          <td>${run.metrics?.successRate ?? 0}%</td>
+          <td>${run.metrics?.hallucinationRate ?? 0}%</td>
+          <td>${run.metrics?.fallbackRate ?? 0}%</td>
+          <td>${formatCost(run.metrics?.cost ?? 0)}</td>
+          <td>${run.metrics?.gatePassed ? "Pass" : "Fail"}</td>
+        </tr>
+      `;
+    }).join("");
+  } catch (error) {
+    console.error("Failed to render history table:", error);
     els.historyTable.innerHTML = `
       <tr>
-        <td colspan="8">No saved benchmark runs.</td>
+        <td colspan="8" style="color: var(--status-fail); text-align: center;">Error loading run history list.</td>
       </tr>
     `;
-    return;
+  }
+}
+
+// 顯示全域錯誤復原橫幅
+export function showGlobalErrorBanner(message, onRecover) {
+  let banner = document.getElementById("globalErrorBanner");
+  if (banner) banner.remove();
+
+  banner = document.createElement("div");
+  banner.id = "globalErrorBanner";
+  banner.style.cssText = `
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    width: 90%;
+    max-width: 600px;
+    background: rgba(220, 53, 69, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    color: #ffffff;
+    padding: 16px 20px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    gap: 16px;
+    animation: slideDown 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  `;
+
+  if (!document.getElementById("bannerStyleSheet")) {
+    const style = document.createElement("style");
+    style.id = "bannerStyleSheet";
+    style.textContent = `
+      @keyframes slideDown {
+        from { transform: translate(-50%, -50px); opacity: 0; }
+        to { transform: translate(-50%, 0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
   }
 
-  els.historyTable.innerHTML = runs.map((run) => {
-    const workflow = getWorkflowLabel(run.config.workflow);
-    const model = getModelLabel(run.config.model);
-    const selected = run.id === selectedRunId ? "selected" : "";
-    return `
-      <tr class="${selected}" data-run-id="${run.id}">
-        <td>${formatDate(run.createdAt)}</td>
-        <td>${workflow}</td>
-        <td>${model}</td>
-        <td>${run.metrics.successRate}%</td>
-        <td>${run.metrics.hallucinationRate}%</td>
-        <td>${run.metrics.fallbackRate}%</td>
-        <td>${formatCost(run.metrics.cost)}</td>
-        <td>${run.metrics.gatePassed ? "Pass" : "Fail"}</td>
-      </tr>
-    `;
-  }).join("");
+  const content = document.createElement("div");
+  content.style.cssText = `
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-grow: 1;
+  `;
+
+  const title = document.createElement("strong");
+  title.textContent = "Application Error Detected";
+  title.style.fontSize = "15px";
+
+  const msg = document.createElement("span");
+  msg.textContent = message;
+  msg.style.fontSize = "13px";
+  msg.style.opacity = "0.9";
+
+  content.appendChild(title);
+  content.appendChild(msg);
+
+  const actions = document.createElement("div");
+  actions.style.cssText = `
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-shrink: 0;
+  `;
+
+  const recoverBtn = document.createElement("button");
+  recoverBtn.textContent = "Reset Storage & Reload";
+  recoverBtn.style.cssText = `
+    background: #ffffff;
+    color: #dc3545;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  `;
+  
+  recoverBtn.addEventListener("mouseover", () => {
+    recoverBtn.style.background = "rgba(255, 255, 255, 0.9)";
+    recoverBtn.style.transform = "scale(1.02)";
+  });
+  recoverBtn.addEventListener("mouseout", () => {
+    recoverBtn.style.background = "#ffffff";
+    recoverBtn.style.transform = "scale(1)";
+  });
+  recoverBtn.addEventListener("click", () => {
+    if (onRecover) onRecover();
+    banner.remove();
+  });
+
+  const closeBtn = document.createElement("button");
+  closeBtn.innerHTML = "&times;";
+  closeBtn.style.cssText = `
+    background: transparent;
+    color: #ffffff;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 4px;
+    opacity: 0.8;
+    line-height: 1;
+  `;
+  closeBtn.addEventListener("click", () => banner.remove());
+
+  actions.appendChild(recoverBtn);
+  actions.appendChild(closeBtn);
+
+  banner.appendChild(content);
+  banner.appendChild(actions);
+
+  document.body.appendChild(banner);
 }
