@@ -4,16 +4,10 @@
 """
 
 import unittest
-import sys
 import tempfile
 from pathlib import Path
 
-# Add backend directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
-
-import server
-
-from server import resolve_repo_path, structured_content, calculate_metrics, load_history, save_history
+from backend import server
 
 
 class TestServer(unittest.TestCase):
@@ -28,21 +22,21 @@ class TestServer(unittest.TestCase):
 
     def test_resolve_repo_path_current_dir(self):
         """Test resolving current directory"""
-        result = resolve_repo_path(".")
+        result = server.resolve_repo_path(".")
         self.assertIsNotNone(result)
         self.assertTrue(Path(result).exists())
 
     def test_structured_content_with_json(self):
         """Test structured content extraction from JSON"""
         mock_result = {"content": [{"type": "text", "text": "{\"data\": \"test\"}"}]}
-        result = structured_content(mock_result)
+        result = server.structured_content(mock_result)
         self.assertIsInstance(result, dict)
         self.assertIn("data", result)
 
     def test_structured_content_direct(self):
         """Test structured content when already structured"""
         mock_result = {"structuredContent": {"test": "data"}}
-        result = structured_content(mock_result)
+        result = server.structured_content(mock_result)
         self.assertEqual(result, {"test": "data"})
 
     def test_calculate_metrics(self):
@@ -51,7 +45,7 @@ class TestServer(unittest.TestCase):
             {"passed": True, "score": 0.9, "latency": 100, "taskId": "1"},
             {"passed": False, "score": 0.4, "latency": 150, "taskId": "2"},
         ]
-        metrics = calculate_metrics(results, threshold=80)
+        metrics = server.calculate_metrics(results, threshold=80)
         self.assertEqual(metrics["total"], 2)
         self.assertEqual(metrics["passed"], 1)
         self.assertEqual(metrics["failed"], 1)
@@ -59,7 +53,7 @@ class TestServer(unittest.TestCase):
 
     def test_history_round_trip(self):
         """Test SQLite history save/load"""
-        self.assertEqual(load_history(), [])
+        self.assertEqual(server.load_history(), [])
 
         run = {
             "id": "run-1",
@@ -69,9 +63,9 @@ class TestServer(unittest.TestCase):
             "results": [],
         }
 
-        save_history(run)
+        server.save_history(run)
 
-        history = load_history()
+        history = server.load_history()
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["id"], "run-1")
         self.assertEqual(history[0]["config"]["workflow"], "testcase")
@@ -81,7 +75,7 @@ class TestServer(unittest.TestCase):
         for index in range(105):
             hour = index // 60
             minute = index % 60
-            save_history({
+            server.save_history({
                 "id": f"run-{index}",
                 "createdAt": f"2026-05-28T{hour:02d}:{minute:02d}:00.000Z",
                 "config": {"workflow": "testcase"},
@@ -89,7 +83,7 @@ class TestServer(unittest.TestCase):
                 "results": [],
             })
 
-        history = load_history()
+        history = server.load_history()
         self.assertEqual(len(history), 100)
         self.assertEqual(history[0]["id"], "run-104")
         self.assertEqual(history[-1]["id"], "run-5")

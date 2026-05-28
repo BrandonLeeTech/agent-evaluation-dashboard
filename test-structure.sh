@@ -8,8 +8,8 @@ echo ""
 
 # 測試 Python 語法
 echo "1️⃣  檢查 Python 語法..."
-python3 -c "import sys; sys.path.insert(0, 'backend'); import server; print('   ✅ backend/server.py')" || exit 1
-python3 -c "import sys; sys.path.insert(0, 'backend/mcp_servers'); import local_repo_server; print('   ✅ backend/mcp_servers/local_repo_server.py')" || exit 1
+python3 -c "from backend import server; print('   ✅ backend/server.py')" || exit 1
+python3 -c "from backend.mcp_servers import local_repo_server; print('   ✅ backend/mcp_servers/local_repo_server.py')" || exit 1
 
 # 測試配置檔案
 echo ""

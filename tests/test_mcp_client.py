@@ -4,12 +4,8 @@
 """
 
 import unittest
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
-
-from server import MCPError
+from backend.server import MCPError
 
 
 class TestMCPClient(unittest.TestCase):
