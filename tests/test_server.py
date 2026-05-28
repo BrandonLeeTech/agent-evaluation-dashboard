@@ -5,15 +5,27 @@
 
 import unittest
 import sys
+import tempfile
 from pathlib import Path
 
 # Add backend directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "backend"))
 
-from server import resolve_repo_path, structured_content, calculate_metrics
+import server
+
+from server import resolve_repo_path, structured_content, calculate_metrics, load_history, save_history
 
 
 class TestServer(unittest.TestCase):
+    def setUp(self):
+        self._original_history_path = server.HISTORY_DB_PATH
+        self._tempdir = tempfile.TemporaryDirectory()
+        server.HISTORY_DB_PATH = Path(self._tempdir.name) / "eval_history.sqlite3"
+
+    def tearDown(self):
+        server.HISTORY_DB_PATH = self._original_history_path
+        self._tempdir.cleanup()
+
     def test_resolve_repo_path_current_dir(self):
         """Test resolving current directory"""
         result = resolve_repo_path(".")
@@ -44,6 +56,43 @@ class TestServer(unittest.TestCase):
         self.assertEqual(metrics["passed"], 1)
         self.assertEqual(metrics["failed"], 1)
         self.assertEqual(metrics["successRate"], 50)
+
+    def test_history_round_trip(self):
+        """Test SQLite history save/load"""
+        self.assertEqual(load_history(), [])
+
+        run = {
+            "id": "run-1",
+            "createdAt": "2026-05-28T00:00:00.000Z",
+            "config": {"workflow": "testcase"},
+            "metrics": {"successRate": 100},
+            "results": [],
+        }
+
+        save_history(run)
+
+        history = load_history()
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["id"], "run-1")
+        self.assertEqual(history[0]["config"]["workflow"], "testcase")
+
+    def test_history_limit(self):
+        """Test history truncation to the newest 100 runs"""
+        for index in range(105):
+            hour = index // 60
+            minute = index % 60
+            save_history({
+                "id": f"run-{index}",
+                "createdAt": f"2026-05-28T{hour:02d}:{minute:02d}:00.000Z",
+                "config": {"workflow": "testcase"},
+                "metrics": {"successRate": 100},
+                "results": [],
+            })
+
+        history = load_history()
+        self.assertEqual(len(history), 100)
+        self.assertEqual(history[0]["id"], "run-104")
+        self.assertEqual(history[-1]["id"], "run-5")
 
 
 if __name__ == '__main__':

@@ -275,9 +275,9 @@ backend/server.py
    - 在 `config/mcp.config.json` 加入新伺服器
 
 3. **資料持久化**
-   - 目前：localStorage（瀏覽器限制 ~5MB）
-   - 未來：SQLite / PostgreSQL
-   - 當 localStorage 不足時才需要
+   - 目前：SQLite（後端持久化）+ localStorage（前端快取）
+   - 仍可擴充：PostgreSQL
+   - localStorage 只作為離線/快取回退
 
 4. **建置流程**
    - 目前：不需要建置

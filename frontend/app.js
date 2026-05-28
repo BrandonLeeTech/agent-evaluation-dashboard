@@ -6,7 +6,7 @@
  *   - 綁定 DOM 事件監聽器並協調功能運作
  */
 
-import { fetchMcpStatus, connectMcpApi, runMcpRepoScanApi } from './js/api.js';
+import { fetchMcpStatus, fetchHistory, postHistory, connectMcpApi, runMcpRepoScanApi } from './js/api.js';
 import { loadRuns, saveRuns, runBenchmark } from './js/benchmarks.js';
 import {
   els,
@@ -24,6 +24,46 @@ let runs = loadRuns();
 let selectedRunId = runs[0]?.id || null;
 
 /**
+ * 將本次新增的 runs 同步到本地快取與後端 SQLite。
+ * @param {Array<object>} newRuns
+ */
+function recordRuns(newRuns) {
+  if (!newRuns.length) {
+    return;
+  }
+
+  runs = [...newRuns, ...runs];
+  selectedRunId = newRuns[0]?.id || selectedRunId;
+  saveRuns(runs);
+  renderCurrentRun(selectedRunId, runs);
+
+  newRuns.slice().reverse().forEach((run) => {
+    void postHistory(run).catch(() => {});
+  });
+}
+
+/**
+ * 優先從後端載入歷史紀錄；若後端離線，回退到 localStorage。
+ */
+async function loadHistory() {
+  try {
+    const payload = await fetchHistory();
+    const history = Array.isArray(payload)
+      ? payload
+      : Array.isArray(payload?.runs)
+        ? payload.runs
+        : [];
+    runs = history;
+    saveRuns(runs);
+  } catch {
+    runs = loadRuns();
+  }
+
+  selectedRunId = runs[0]?.id || null;
+  renderCurrentRun(selectedRunId, runs);
+}
+
+/**
  * 處理模擬基準測試的點擊與執行流程
  */
 function handleRun() {
@@ -33,10 +73,7 @@ function handleRun() {
 
   window.setTimeout(() => {
     const run = runBenchmark(config);
-    runs.unshift(run);
-    selectedRunId = run.id;
-    saveRuns(runs);
-    renderCurrentRun(selectedRunId, runs);
+    recordRuns([run]);
     setRunStatus("Complete", "complete");
     els.runButton.disabled = false;
   }, 320);
@@ -50,10 +87,7 @@ function handleCompare() {
   const candidate = getConfig({ prompt: "v2" });
   const baseRun = runBenchmark(base);
   const candidateRun = runBenchmark(candidate);
-  runs.unshift(candidateRun, baseRun);
-  selectedRunId = candidateRun.id;
-  saveRuns(runs);
-  renderCurrentRun(selectedRunId, runs);
+  recordRuns([candidateRun, baseRun]);
   setRunStatus("Compared", "complete");
 }
 
@@ -115,10 +149,7 @@ async function runMcpRepoScan() {
   els.mcpRepoScanButton.disabled = true;
   try {
     const payload = await runMcpRepoScanApi(server, repoRoot);
-    runs.unshift(payload.run);
-    selectedRunId = payload.run.id;
-    saveRuns(runs);
-    renderCurrentRun(selectedRunId, runs);
+    recordRuns([payload.run]);
     renderMcpTools(payload.evidence.server.name, payload.evidence.tools);
     renderMcpEvidence(payload.evidence);
     setRunStatus("MCP Complete", "complete");
@@ -147,13 +178,13 @@ els.historyTable.addEventListener("click", (event) => {
 });
 
 // 初始化頁面內容
-renderCurrentRun(selectedRunId, runs);
-loadMcpStatus();
+await loadHistory();
+void loadMcpStatus();
 
 /**
  * 全域非預期錯誤攔截：
  * 當頁面上任何未被 try-catch 捕獲的 JS 錯誤或 Promise rejection 發生時，
- * 顯示錯誤復原橫幅，並提供一鍵清除 localStorage 的修復功能。
+ * 顯示錯誤復原橫幅，並提供一鍵清除本機快取的修復功能。
  */
 function handleGlobalRecovery() {
   runs = [];

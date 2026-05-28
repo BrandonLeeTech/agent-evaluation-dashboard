@@ -11,6 +11,7 @@
 import json
 import os
 import queue
+import sqlite3
 import subprocess
 import threading
 import time
@@ -22,12 +23,104 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent  # 指向專案根目錄
 CONFIG_PATH = ROOT / "config" / "mcp.config.json"
 FRONTEND_DIR = ROOT / "frontend"
+HISTORY_DB_PATH = ROOT / "data" / "eval_history.sqlite3"
+HISTORY_LIMIT = 100
+HISTORY_LOCK = threading.RLock()
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("PORT", "5173"))
 
 
 class MCPError(RuntimeError):
     pass
+
+
+def _ensure_history_schema(connection):
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT UNIQUE NOT NULL,
+            created_at TEXT NOT NULL,
+            payload TEXT NOT NULL
+        )
+    """)
+    connection.execute("""
+        CREATE INDEX IF NOT EXISTS idx_runs_created_at
+        ON runs(created_at DESC, id DESC)
+    """)
+
+
+def _open_history_db():
+    HISTORY_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(HISTORY_DB_PATH, timeout=30)
+    connection.row_factory = sqlite3.Row
+    _ensure_history_schema(connection)
+    return connection
+
+
+def load_history(limit=HISTORY_LIMIT):
+    if limit <= 0 or not HISTORY_DB_PATH.exists():
+        return []
+
+    connection = None
+    try:
+        with HISTORY_LOCK:
+            connection = sqlite3.connect(HISTORY_DB_PATH, timeout=30)
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                "SELECT payload FROM runs ORDER BY created_at DESC, id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        history = []
+        for row in rows:
+            try:
+                history.append(json.loads(row["payload"]))
+            except json.JSONDecodeError:
+                continue
+        return history
+    except Exception:
+        return []
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def save_history(run):
+    if not isinstance(run, dict):
+        raise ValueError("run is required")
+
+    run_id = run.get("id")
+    if not run_id:
+        raise ValueError("run.id is required")
+
+    created_at = run.get("createdAt") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    payload = json.dumps(run, ensure_ascii=False)
+
+    connection = None
+    with HISTORY_LOCK:
+        try:
+            connection = _open_history_db()
+            connection.execute("""
+                INSERT INTO runs (run_id, created_at, payload)
+                VALUES (?, ?, ?)
+                ON CONFLICT(run_id) DO UPDATE SET
+                    created_at = excluded.created_at,
+                    payload = excluded.payload
+            """, (str(run_id), created_at, payload))
+            connection.execute("""
+                DELETE FROM runs
+                WHERE id NOT IN (
+                    SELECT id
+                    FROM runs
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT ?
+                )
+            """, (HISTORY_LIMIT,))
+            connection.commit()
+        finally:
+            if connection is not None:
+                connection.close()
+
+    return run
 
 
 class StdioMCPClient:
@@ -366,6 +459,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/health":
             self.send_json({"status": "ok"})
             return
+        if parsed.path == "/api/history":
+            self.send_json(load_history())
+            return
         if parsed.path == "/api/mcp/status":
             self.send_json(registry.status())
             return
@@ -381,6 +477,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         try:
             body = self.read_json_body()
+            if parsed.path == "/api/history":
+                run = body.get("run")
+                save_history(run)
+                self.send_json({"status": "ok", "run": run})
+                return
             if parsed.path == "/api/mcp/connect":
                 server_name = body.get("server")
                 client = registry.get(server_name)
@@ -407,6 +508,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 self.send_json(run_repo_scan(body.get("server"), body.get("repoRoot")))
                 return
             self.send_error(404, "API endpoint not found")
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, status=400)
         except Exception as exc:
             self.send_json({"error": str(exc)}, status=500)
 
@@ -415,7 +518,10 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if length == 0:
             return {}
         raw = self.rfile.read(length).decode("utf-8")
-        return json.loads(raw)
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Invalid JSON body") from exc
 
     def send_json(self, payload, status=200):
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -427,6 +533,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
 
 def main():
+    _open_history_db().close()
     server = ThreadingHTTPServer((HOST, PORT), DashboardHandler)
     print(f"Dashboard running at http://{HOST}:{PORT}")
     print("Press Ctrl+C to stop.")

@@ -24,6 +24,24 @@ export function fetchMcpStatus() {
 }
 
 /**
+ * 載入後端 SQLite 保存的歷史紀錄
+ */
+export function fetchHistory() {
+  return apiRequest("/api/history");
+}
+
+/**
+ * 將單次 run 寫入後端 SQLite 歷史紀錄
+ * @param {object} run
+ */
+export function postHistory(run) {
+  return apiRequest("/api/history", {
+    method: "POST",
+    body: JSON.stringify({ run }),
+  });
+}
+
+/**
  * 連接指定 MCP 伺服器並更新其 Repository Root
  * @param {string} server
  * @param {string} repoRoot

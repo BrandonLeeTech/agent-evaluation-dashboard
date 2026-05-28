@@ -17,6 +17,7 @@ __pycache__/
 *.so
 *.egg
 *.egg-info/
+data/eval_history.sqlite3
 
 # 環境變數
 .env
@@ -27,6 +28,7 @@ __pycache__/
 .idea/
 *.swp
 *.swo
+.antigravitycli*
 
 # 測試覆蓋率
 .coverage

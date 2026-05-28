@@ -28,7 +28,7 @@ This file provides context for AI agents (Claude Code, Codex, Hermes, OpenCode, 
 
 - ❌ Train models
 - ❌ Call OpenAI/Anthropic APIs (yet — future feature)
-- ❌ Store data in database (uses localStorage)
+- ❌ Require a remote database service (uses local SQLite + localStorage cache)
 - ❌ Require authentication
 - ❌ Have a build step (plain HTML/JS/CSS)
 
@@ -325,7 +325,7 @@ Not implemented yet. Good targets:
 ### Current Limitations
 
 1. **No authentication** — anyone with URL can access
-2. **No persistence** — localStorage only (lost on cache clear)
+2. **Persistence is local-only** — SQLite on the backend plus localStorage cache
 3. **No rate limiting** — MCP calls can spam server
 4. **No input sanitization** — XSS risk in frontend
 5. **No concurrent request handling** — one MCP call at a time per server
@@ -406,15 +406,14 @@ MCP responses are trusted. If adding external data sources (GitHub API, etc.), s
 
 **Current bundle size:** ~50KB (no build needed yet)
 
-### When to Add a Database
+### When to Add a Remote Database
 
 **Wait until:**
 - Multiple users need shared state
-- Run history needs to persist across sessions
-- Need complex queries
-- localStorage limit exceeded (~5MB)
+- Need hosted durability beyond the local machine
+- Need complex multi-user queries
 
-**Current approach:** localStorage is fine for MVP
+**Current approach:** local SQLite is fine for MVP
 
 ### When to Add Real LLM Integration
 

@@ -44,10 +44,10 @@ graph TD
   - Add native HTML sanitization when rendering stdout/file contents from MCP tools.
   - Implement basic fallback error boundaries in UI layout so a single network/API error doesn't lock up the browser interface.
 
-### Upcoming: Phase 4 - History Persistence (JSON DB)
+### Upcoming: Phase 4 - History Persistence (SQLite)
 * **Goal**: Transition from ephemeral browser `localStorage` to local server-side history logs.
 * **Tasks**:
-  - Create a lightweight Python JSON-file database helper (e.g. storing runs in `data/eval_history.json`).
+  - Create a lightweight Python SQLite helper for storing runs in `data/eval_history.sqlite3`.
   - Expose `/api/history` endpoints to retrieve and post runs.
   - Connect the frontend to load and persist data across browser session clears.
 

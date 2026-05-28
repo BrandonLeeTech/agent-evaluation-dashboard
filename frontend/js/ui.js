@@ -408,7 +408,7 @@ export function showGlobalErrorBanner(message, onRecover) {
   `;
 
   const recoverBtn = document.createElement("button");
-  recoverBtn.textContent = "Reset Storage & Reload";
+  recoverBtn.textContent = "Reset Cache & Reload";
   recoverBtn.style.cssText = `
     background: #ffffff;
     color: #dc3545;
