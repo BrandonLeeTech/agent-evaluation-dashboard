@@ -9,7 +9,8 @@
       ],
       "env": {
         "MCP_REPO_ROOT": "."
-      }
+      },
+      "timeout": 15
     }
   }
 }

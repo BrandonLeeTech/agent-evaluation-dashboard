@@ -45,11 +45,12 @@ export function postHistory(run) {
  * 連接指定 MCP 伺服器並更新其 Repository Root
  * @param {string} server
  * @param {string} repoRoot
+ * @param {boolean} reconnect
  */
-export function connectMcpApi(server, repoRoot) {
+export function connectMcpApi(server, repoRoot, reconnect = false) {
   return apiRequest("/api/mcp/connect", {
     method: "POST",
-    body: JSON.stringify({ server, repoRoot }),
+    body: JSON.stringify({ server, repoRoot, reconnect }),
   });
 }
 

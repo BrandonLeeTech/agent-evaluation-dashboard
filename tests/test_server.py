@@ -88,6 +88,87 @@ class TestServer(unittest.TestCase):
         self.assertEqual(history[0]["id"], "run-104")
         self.assertEqual(history[-1]["id"], "run-5")
 
+    def test_timeout_config_parsing(self):
+        """Test that StdioMCPClient parses timeout from config"""
+        client_default = server.StdioMCPClient("test", {"command": "echo"})
+        self.assertEqual(client_default.timeout, 10.0)
+
+        client_custom = server.StdioMCPClient("test", {"command": "echo", "timeout": 15})
+        self.assertEqual(client_custom.timeout, 15.0)
+
+    def test_client_stop_cleans_resources(self):
+        """Test that stop() terminates process and closes streams"""
+        from unittest.mock import MagicMock
+        client = server.StdioMCPClient("test", {"command": "echo"})
+        mock_proc = MagicMock()
+        client.process = mock_proc
+        
+        client.stop()
+        
+        self.assertIsNone(client.process)
+        mock_proc.terminate.assert_called_once()
+        mock_proc.wait.assert_called_once()
+        mock_proc.stdin.close.assert_called_once()
+        mock_proc.stdout.close.assert_called_once()
+        mock_proc.stderr.close.assert_called_once()
+
+    def test_client_timeout_auto_recovery(self):
+        """Test that a timeout exception calls stop() to auto-recover"""
+        import queue
+        from unittest.mock import MagicMock, patch
+        client = server.StdioMCPClient("test", {"command": "echo"})
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None # Running
+        client.process = mock_proc
+        
+        # Mock _write to do nothing
+        client._write = MagicMock()
+        
+        # Mock messages.get to raise queue.Empty (timeout)
+        with patch.object(client.messages, "get", side_effect=queue.Empty):
+            with patch.object(client, "stop") as mock_stop:
+                with self.assertRaises(server.MCPError) as context:
+                    client._request_started("test_method", {}, timeout=1.0)
+                
+                self.assertIn("MCP request timed out", str(context.exception))
+                mock_stop.assert_called_once()
+
+    def test_concurrent_ensure_started_lock(self):
+        """Test that concurrent ensure_started runs safely and avoids double start"""
+        import threading
+        import subprocess
+        from unittest.mock import MagicMock, patch
+        
+        client = server.StdioMCPClient("test", {"command": "echo"})
+        start_count = 0
+        
+        def mock_popen_func(*args, **kwargs):
+            nonlocal start_count
+            start_count += 1
+            # Return mock process with mocked stdin/stdout/stderr
+            p = MagicMock()
+            p.poll.return_value = None
+            p.stdin = MagicMock()
+            p.stdout = MagicMock()
+            p.stderr = MagicMock()
+            return p
+
+        # Mock _request_started to avoid running initialize payload over stdio
+        with patch("subprocess.Popen", side_effect=mock_popen_func):
+            with patch.object(client, "_request_started"):
+                with patch.object(client, "_notify_started"):
+                    # We run multiple threads trying to call ensure_started at the same time
+                    threads = []
+                    for _ in range(5):
+                        t = threading.Thread(target=client.ensure_started)
+                        threads.append(t)
+                        t.start()
+                    for t in threads:
+                        t.join()
+        
+        # Popen should have been called exactly once because of RLock guarding ensure_started
+        self.assertEqual(start_count, 1)
+
 
 if __name__ == '__main__':
     unittest.main()

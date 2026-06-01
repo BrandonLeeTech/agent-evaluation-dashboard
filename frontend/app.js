@@ -126,7 +126,7 @@ async function connectMcp() {
   const repoRoot = els.mcpRepoPathInput.value.trim();
   setMcpStatus("Connecting", "running");
   try {
-    const payload = await connectMcpApi(server, repoRoot);
+    const payload = await connectMcpApi(server, repoRoot, true);
     renderMcpTools(payload.server, payload.tools);
     if (payload.root) {
       els.mcpMeta.textContent = `${payload.server} · ${payload.tools.length} tools · ${payload.root}`;

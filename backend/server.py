@@ -8,11 +8,13 @@
   - 支援執行時期切換 repo 路徑
 """
 
+import atexit
 import json
 import os
 import queue
 import sqlite3
 import subprocess
+import sys
 import threading
 import time
 import urllib.parse
@@ -132,11 +134,44 @@ class StdioMCPClient:
         self.lock = threading.RLock()
         self.messages = queue.Queue()
         self.stderr_lines = []
+        self.timeout = float(config.get("timeout", 10.0))
+
+    def stop(self):
+        with self.lock:
+            if not self.process:
+                return
+            proc = self.process
+            self.process = None  # Detach immediately so other threads don't reuse it
+            try:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=2.0)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=2.0)
+            except Exception:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=2.0)
+                except Exception:
+                    pass
+            finally:
+                # Clean up stdin/stdout/stderr file descriptors
+                for stream in [proc.stdin, proc.stdout, proc.stderr]:
+                    if stream:
+                        try:
+                            stream.close()
+                        except Exception:
+                            pass
 
     def ensure_started(self):
         with self.lock:
             if self.process and self.process.poll() is None:
                 return
+
+            # Clean up any residual streams before restarting
+            if self.process:
+                self.stop()
 
             command = self.config["command"]
             args = [self._resolve_arg(arg) for arg in self.config.get("args", [])]
@@ -195,22 +230,32 @@ class StdioMCPClient:
     def _read_stdout(self):
         if not self.process or not self.process.stdout:
             return
-        for line in self.process.stdout:
-            try:
-                self.messages.put(json.loads(line))
-            except json.JSONDecodeError:
-                self.messages.put({"jsonrpc": "2.0", "error": {"message": line.strip()}})
+        try:
+            for line in self.process.stdout:
+                try:
+                    self.messages.put(json.loads(line))
+                except json.JSONDecodeError:
+                    self.messages.put({"jsonrpc": "2.0", "error": {"message": line.strip()}})
+        except (OSError, ValueError):
+            pass
 
     def _read_stderr(self):
         if not self.process or not self.process.stderr:
             return
-        for line in self.process.stderr:
-            self.stderr_lines.append(line.strip())
-            self.stderr_lines = self.stderr_lines[-40:]
+        try:
+            for line in self.process.stderr:
+                self.stderr_lines.append(line.strip())
+                self.stderr_lines = self.stderr_lines[-40:]
+        except (OSError, ValueError):
+            pass
 
-    def _request_started(self, method, params, timeout=10):
+    def _request_started(self, method, params, timeout=None):
+        if timeout is None:
+            timeout = self.timeout
+
         with self.lock:
             if not self.process or self.process.poll() is not None:
+                self.stop()
                 raise MCPError(f"MCP server {self.name} is not running")
 
             request_id = self.next_id
@@ -224,6 +269,7 @@ class StdioMCPClient:
                 try:
                     message = self.messages.get(timeout=remaining)
                 except queue.Empty as exc:
+                    self.stop()  # Auto-kill stuck process on timeout!
                     raise MCPError(f"MCP request timed out: {method}") from exc
 
                 if message.get("id") != request_id:
@@ -232,6 +278,7 @@ class StdioMCPClient:
                     raise MCPError(message["error"].get("message", "Unknown MCP error"))
                 return message.get("result", {})
 
+            self.stop()  # Auto-kill stuck process on timeout!
             raise MCPError(f"MCP request timed out: {method}")
 
     def _notify_started(self, method, params):
@@ -277,8 +324,24 @@ class MCPRegistry:
             "servers": [client.status() for client in self.clients.values()],
         }
 
+    def prestart_all(self):
+        for client in self.clients.values():
+            try:
+                client.ensure_started()
+                print(f"Pre-started MCP server: {client.name}")
+            except Exception as e:
+                print(f"Failed to pre-start MCP server {client.name}: {e}", file=sys.stderr)
+
+    def stop_all(self):
+        for client in self.clients.values():
+            try:
+                client.stop()
+            except Exception as e:
+                print(f"Error stopping MCP server {client.name}: {e}", file=sys.stderr)
+
 
 registry = MCPRegistry(CONFIG_PATH)
+atexit.register(registry.stop_all)
 
 
 def resolve_repo_path(repo_root):
@@ -587,11 +650,15 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             if parsed.path == "/api/mcp/connect":
                 server_name = body.get("server")
                 client = registry.get(server_name)
+                reconnect = body.get("reconnect", False)
                 resolved_root = resolve_repo_path(body.get("repoRoot"))
-                root_change = None
-                if resolved_root:
-                    root_change = structured_content(client.call_tool("set_repo_root", {"path": resolved_root}))
-                tools = client.list_tools()
+                with client.lock:
+                    if reconnect:
+                        client.stop()
+                    root_change = None
+                    if resolved_root:
+                        root_change = structured_content(client.call_tool("set_repo_root", {"path": resolved_root}))
+                    tools = client.list_tools()
                 self.send_json({
                     "server": server_name or registry.default_server,
                     "tools": tools,
@@ -646,7 +713,15 @@ def main():
     server = ThreadingHTTPServer((HOST, PORT), DashboardHandler)
     print(f"Dashboard running at http://{HOST}:{PORT}")
     print("Press Ctrl+C to stop.")
-    server.serve_forever()
+    try:
+        registry.prestart_all()
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down dashboard...")
+    finally:
+        print("Stopping all MCP servers...")
+        registry.stop_all()
+        server.server_close()
 
 
 if __name__ == "__main__":
