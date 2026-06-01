@@ -22,8 +22,10 @@ export const els = {
   resetButton: document.getElementById("resetButton"),
   mcpServerSelect: document.getElementById("mcpServerSelect"),
   mcpRepoPathInput: document.getElementById("mcpRepoPathInput"),
+  qaTaskInput: document.getElementById("qaTaskInput"),
   mcpConnectButton: document.getElementById("mcpConnectButton"),
   mcpRepoScanButton: document.getElementById("mcpRepoScanButton"),
+  groundedQaButton: document.getElementById("groundedQaButton"),
   mcpStatusDot: document.getElementById("mcpStatusDot"),
   mcpStatusText: document.getElementById("mcpStatusText"),
   mcpMeta: document.getElementById("mcpMeta"),
@@ -137,6 +139,11 @@ export function renderMcpEvidence(evidence) {
     file_count: evidence.summary?.file_count,
     extensions: evidence.summary?.extensions,
     quality: evidence.quality,
+    qaTask: evidence.qaContext?.query,
+    qaGrounding: evidence.qaContext?.grounding,
+    qaFindings: evidence.qaContext?.findings,
+    qaSourceMatches: evidence.qaContext?.source_matches?.slice(0, 5),
+    qaTestMatches: evidence.qaContext?.test_matches?.slice(0, 5),
   };
   els.mcpOutput.textContent = JSON.stringify(compact, null, 2);
 }

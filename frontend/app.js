@@ -6,7 +6,7 @@
  *   - 綁定 DOM 事件監聽器並協調功能運作
  */
 
-import { fetchMcpStatus, fetchHistory, postHistory, connectMcpApi, runMcpRepoScanApi } from './js/api.js';
+import { fetchMcpStatus, fetchHistory, postHistory, connectMcpApi, runMcpRepoScanApi, runGroundedQaApi } from './js/api.js';
 import { loadRuns, saveRuns, runBenchmark } from './js/benchmarks.js';
 import {
   els,
@@ -163,12 +163,39 @@ async function runMcpRepoScan() {
   }
 }
 
+/**
+ * 以真實 repo evidence 評估 QA agent 任務，不執行測試、不呼叫外部 AI。
+ */
+async function runGroundedQa() {
+  const server = els.mcpServerSelect.value;
+  const repoRoot = els.mcpRepoPathInput.value.trim();
+  const query = els.qaTaskInput.value.trim();
+  setRunStatus("QA Evaluating", "running");
+  setMcpStatus("Collecting evidence", "running");
+  els.groundedQaButton.disabled = true;
+  try {
+    const payload = await runGroundedQaApi(server, repoRoot, query);
+    recordRuns([payload.run]);
+    renderMcpTools(payload.evidence.server.name, payload.evidence.tools);
+    renderMcpEvidence(payload.evidence);
+    setRunStatus("QA Complete", "complete");
+    setMcpStatus("Connected", "online");
+  } catch (error) {
+    setRunStatus("QA Failed", "running");
+    setMcpStatus("QA failed", "offline");
+    els.mcpOutput.textContent = error.message;
+  } finally {
+    els.groundedQaButton.disabled = false;
+  }
+}
+
 // 綁定 UI 事件接頭
 els.runButton.addEventListener("click", handleRun);
 els.compareButton.addEventListener("click", handleCompare);
 els.resetButton.addEventListener("click", resetHistory);
 els.mcpConnectButton.addEventListener("click", connectMcp);
 els.mcpRepoScanButton.addEventListener("click", runMcpRepoScan);
+els.groundedQaButton.addEventListener("click", runGroundedQa);
 
 els.historyTable.addEventListener("click", (event) => {
   const row = event.target.closest("tr[data-run-id]");

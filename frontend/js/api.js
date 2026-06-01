@@ -77,3 +77,16 @@ export function runMcpRepoScanApi(server, repoRoot) {
     body: JSON.stringify({ server, repoRoot }),
   });
 }
+
+/**
+ * 執行基於真實 repo evidence 的 QA agent 評估
+ * @param {string} server
+ * @param {string} repoRoot
+ * @param {string} query
+ */
+export function runGroundedQaApi(server, repoRoot, query) {
+  return apiRequest("/api/evaluations/grounded-qa", {
+    method: "POST",
+    body: JSON.stringify({ server, repoRoot, query }),
+  });
+}

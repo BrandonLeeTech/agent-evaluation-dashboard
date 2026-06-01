@@ -1,4 +1,4 @@
-<!-- 
+<!--
   檔案用途：Agent 評估儀表板的主要 HTML 介面
   功能：提供使用者介面，包含模擬評估和 MCP 連接功能
   模式：可獨立開啟（靜態模式）或透過 server.py 執行（MCP 模式）
@@ -92,6 +92,8 @@
           </select>
           <label for="mcpRepoPathInput">Repo Path</label>
           <input id="mcpRepoPathInput" type="text" value="." placeholder="/Users/name/dev/project">
+          <label for="qaTaskInput">QA Task</label>
+          <input id="qaTaskInput" type="text" value="Find missing edge cases in authentication flow" placeholder="Find missing edge cases in login flow">
           <div class="connector-status">
             <span id="mcpStatusDot" class="status-dot"></span>
             <span id="mcpStatusText">Checking backend</span>
@@ -111,6 +113,14 @@
               </svg>
             </span>
             Run Repo Scan
+          </button>
+          <button id="groundedQaButton" class="ghost-button" type="button">
+            <span class="button-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M4 5h16v2H4zm0 4h10v2H4zm0 4h16v2H4zm0 4h10v2H4zm13-8 3 3-3 3-1.4-1.4L17.2 12l-1.6-1.6z"></path>
+              </svg>
+            </span>
+            Run Grounded QA
           </button>
         </section>
 

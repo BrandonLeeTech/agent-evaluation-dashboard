@@ -309,10 +309,10 @@ def structured_content(result):
     return result
 
 
-def make_result(task_id, title, passed, score, reason, latency, tags=None):
+def make_result(task_id, title, passed, score, reason, latency, tags=None, category="mcp"):
     return {
         "taskId": task_id,
-        "category": "mcp",
+        "category": category,
         "title": title,
         "risk": reason,
         "score": score,
@@ -449,6 +449,108 @@ def run_repo_scan(server_name=None, repo_root=None):
     }
 
 
+def run_grounded_qa_evaluation(server_name=None, repo_root=None, query=None):
+    started = time.monotonic()
+    client = registry.get(server_name)
+    resolved_root = resolve_repo_path(repo_root)
+    root_change = None
+    if resolved_root:
+        root_change = structured_content(client.call_tool("set_repo_root", {"path": resolved_root}))
+
+    tools = client.list_tools()
+    context = structured_content(client.call_tool("inspect_qa_context", {
+        "query": query or "Find missing edge cases in authentication flow",
+    }))
+    elapsed = max(60, round((time.monotonic() - started) * 1000))
+    latency = max(40, round(elapsed / 5))
+    grounding = context.get("grounding", {})
+    source_count = grounding.get("source_match_count", 0)
+    test_count = grounding.get("test_match_count", 0)
+    inspected_count = grounding.get("inspected_file_count", 0)
+    findings = context.get("findings", [])
+    high_findings = [item for item in findings if item.get("severity") == "high"]
+
+    results = [
+        make_result(
+            "QA-001",
+            "Collect real repository evidence for QA task",
+            source_count > 0 or test_count > 0,
+            0.92 if source_count > 0 or test_count > 0 else 0.35,
+            "No matching source or test evidence found",
+            latency,
+            [f"{source_count + test_count} matches"],
+            "agent",
+        ),
+        make_result(
+            "QA-002",
+            "Inspect implementation files related to task",
+            source_count > 0 and inspected_count > 0,
+            0.9 if source_count > 0 and inspected_count > 0 else 0.45,
+            "No implementation files inspected for this QA task",
+            latency,
+            [f"{source_count} source hits"],
+            "agent",
+        ),
+        make_result(
+            "QA-003",
+            "Inspect existing test evidence related to task",
+            test_count > 0,
+            0.88 if test_count > 0 else 0.42,
+            "No existing tests matched the QA task keywords",
+            latency,
+            [f"{test_count} test hits"],
+            "requirements",
+        ),
+        make_result(
+            "QA-004",
+            "Identify QA coverage gaps from repo evidence",
+            len(high_findings) == 0,
+            0.84 if len(high_findings) == 0 else 0.5,
+            "; ".join(item.get("message", "Unknown gap") for item in findings[:3]) or "No blocking evidence gaps detected",
+            latency,
+            [f"{len(findings)} findings"],
+            "requirements",
+        ),
+        make_result(
+            "QA-005",
+            "Keep evaluation grounded in inspected files",
+            inspected_count > 0,
+            0.9 if inspected_count > 0 else 0.4,
+            "Evaluation has no readable file excerpts",
+            latency,
+            [f"{inspected_count} files read"],
+            "agent",
+        ),
+    ]
+
+    run = {
+        "id": f"qa-{round(time.time() * 1000)}",
+        "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "config": {
+            "workflow": "mcpRepo",
+            "prompt": "mcp",
+            "model": "local",
+            "fallback": False,
+            "strictJudge": True,
+            "threshold": 80,
+            "categories": ["agent", "requirements"],
+            "qaTask": context.get("query"),
+        },
+        "metrics": calculate_metrics(results),
+        "results": results,
+    }
+
+    return {
+        "run": run,
+        "evidence": {
+            "server": client.status(),
+            "rootChange": root_change,
+            "tools": tools,
+            "qaContext": context,
+        },
+    }
+
+
 class DashboardHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         # 設定靜態檔案服務目錄為 frontend/
@@ -506,6 +608,13 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 return
             if parsed.path == "/api/evaluations/repo-scan":
                 self.send_json(run_repo_scan(body.get("server"), body.get("repoRoot")))
+                return
+            if parsed.path == "/api/evaluations/grounded-qa":
+                self.send_json(run_grounded_qa_evaluation(
+                    body.get("server"),
+                    body.get("repoRoot"),
+                    body.get("query"),
+                ))
                 return
             self.send_error(404, "API endpoint not found")
         except ValueError as exc:

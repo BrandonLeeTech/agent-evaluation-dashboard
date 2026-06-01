@@ -20,6 +20,10 @@ PROTOCOL_VERSION = "2025-06-18"
 ROOT = Path(os.environ.get("MCP_REPO_ROOT", ".")).expanduser().resolve()
 SKIP_DIRS = {".git", ".venv", "__pycache__", "node_modules", "dist", "build"}
 MAX_FILE_BYTES = 900_000
+QA_STOPWORDS = {
+    "the", "and", "for", "with", "from", "into", "that", "this", "test",
+    "case", "cases", "flow", "find", "missing", "edge", "qa",
+}
 
 
 def send(payload):
@@ -163,6 +167,104 @@ def search_files(arguments):
             break
 
     return {"query": query, "count": len(matches), "matches": matches}
+
+
+def is_test_path(relative_path):
+    name = relative_path.lower()
+    return bool(
+        re.search(r"(^|/)(__tests__|tests?|spec)(/|$)", name)
+        or re.search(r"(^|/)(test_|.*_test\.|.*\.test\.|.*\.spec\.)", name)
+    )
+
+
+def extract_qa_keywords(query):
+    tokens = [
+        token.lower()
+        for token in re.findall(r"[a-zA-Z][a-zA-Z0-9_]{2,}", query)
+        if token.lower() not in QA_STOPWORDS
+    ]
+    keywords = []
+    for token in tokens + ["auth", "login", "error", "validation"]:
+        if token not in keywords:
+            keywords.append(token)
+    return keywords[:8]
+
+
+def inspect_qa_context(arguments):
+    query = str(arguments.get("query", "")).strip() or "Find missing edge cases in authentication flow"
+    keywords = extract_qa_keywords(query)
+    seen_paths = set()
+    source_matches = []
+    test_matches = []
+
+    for keyword in keywords:
+        search_result = search_files({"query": keyword, "limit": 12})
+        for match in search_result["matches"]:
+            path = match["path"]
+            if path in seen_paths:
+                continue
+            seen_paths.add(path)
+            enriched = {**match, "keyword": keyword}
+            if is_test_path(path):
+                test_matches.append(enriched)
+            else:
+                source_matches.append(enriched)
+
+    inspected_files = []
+    for match in (source_matches[:4] + test_matches[:3]):
+        try:
+            path = safe_path(match["path"])
+            content = read_text(path, 2200)
+        except (OSError, ValueError):
+            continue
+        inspected_files.append({
+            "path": match["path"],
+            "kind": "test" if is_test_path(match["path"]) else "source",
+            "keyword": match["keyword"],
+            "preview": match.get("preview", ""),
+            "content_excerpt": content,
+        })
+
+    findings = []
+    if not source_matches:
+        findings.append({
+            "severity": "high",
+            "message": "No implementation evidence found for the QA task keywords.",
+            "evidence": [],
+        })
+    if not test_matches:
+        findings.append({
+            "severity": "high",
+            "message": "No existing test evidence found for the QA task keywords.",
+            "evidence": [match["path"] for match in source_matches[:3]],
+        })
+    if source_matches and test_matches and len(test_matches) < max(1, len(source_matches) // 3):
+        findings.append({
+            "severity": "medium",
+            "message": "Relevant implementation evidence appears broader than matching test evidence.",
+            "evidence": [match["path"] for match in (source_matches[:2] + test_matches[:2])],
+        })
+    if not inspected_files:
+        findings.append({
+            "severity": "medium",
+            "message": "No files could be read for grounded QA analysis.",
+            "evidence": [],
+        })
+
+    return {
+        "root": str(ROOT),
+        "query": query,
+        "keywords": keywords,
+        "source_matches": source_matches[:20],
+        "test_matches": test_matches[:20],
+        "inspected_files": inspected_files,
+        "findings": findings,
+        "grounding": {
+            "source_match_count": len(source_matches),
+            "test_match_count": len(test_matches),
+            "inspected_file_count": len(inspected_files),
+        },
+    }
 
 
 def scan_static_app(_arguments):
@@ -344,6 +446,16 @@ TOOLS = {
         "description": "Evaluate general repository quality signals such as README, tests, CI, dependency files, and TODO risk.",
         "inputSchema": {"type": "object", "properties": {}},
         "handler": scan_repo_quality,
+    },
+    "inspect_qa_context": {
+        "description": "Collect real repository evidence for a QA agent evaluation task without running tests.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+            },
+        },
+        "handler": inspect_qa_context,
     },
 }
 
