@@ -170,11 +170,12 @@ async function runGroundedQa() {
   const server = els.mcpServerSelect.value;
   const repoRoot = els.mcpRepoPathInput.value.trim();
   const query = els.qaTaskInput.value.trim();
+  const model = els.modelSelect.value;
   setRunStatus("QA Evaluating", "running");
   setMcpStatus("Collecting evidence", "running");
   els.groundedQaButton.disabled = true;
   try {
-    const payload = await runGroundedQaApi(server, repoRoot, query);
+    const payload = await runGroundedQaApi(server, repoRoot, query, model);
     recordRuns([payload.run]);
     renderMcpTools(payload.evidence.server.name, payload.evidence.tools);
     renderMcpEvidence(payload.evidence);

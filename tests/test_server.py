@@ -3,6 +3,7 @@
 功能：測試路徑解析、結構化內容提取、指標計算等核心功能
 """
 
+import json
 import unittest
 import tempfile
 from pathlib import Path
@@ -168,6 +169,126 @@ class TestServer(unittest.TestCase):
         
         # Popen should have been called exactly once because of RLock guarding ensure_started
         self.assertEqual(start_count, 1)
+
+    def test_dotenv_loading(self):
+        """Test that load_dotenv reads keys and populates os.environ"""
+        import os
+        import tempfile
+        from pathlib import Path
+        
+        # Save original env
+        orig_key = os.environ.get("TEST_KEY_ENV_VAR")
+        
+        # Create a temp .env file
+        with tempfile.TemporaryDirectory() as tempdir:
+            orig_root = server.ROOT
+            server.ROOT = Path(tempdir)
+            try:
+                (server.ROOT / ".env").write_text(
+                    "# This is a comment\nTEST_KEY_ENV_VAR=my_secret_token\n",
+                    encoding="utf-8"
+                )
+                server.load_dotenv()
+                self.assertEqual(os.environ.get("TEST_KEY_ENV_VAR"), "my_secret_token")
+            finally:
+                server.ROOT = orig_root
+                if orig_key is None:
+                    os.environ.pop("TEST_KEY_ENV_VAR", None)
+                else:
+                    os.environ["TEST_KEY_ENV_VAR"] = orig_key
+
+    def test_sanitize_secrets(self):
+        """Test that sanitize_secrets redacts API keys"""
+        text_with_key_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini?key=AIzaSyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q"
+        text_with_raw_key = "Found secret key AIzaSyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q in the codebase"
+        
+        self.assertIn("key=[REDACTED]", server.sanitize_secrets(text_with_key_url))
+        self.assertNotIn("AIzaSyA1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6Q", server.sanitize_secrets(text_with_raw_key))
+        self.assertIn("AIzaSy[REDACTED]", server.sanitize_secrets(text_with_raw_key))
+
+    def test_extract_json_block(self):
+        """Test that extract_json_block parses JSON nested in markdown wrappers"""
+        text_with_markdown = "Here is the result:\n```json\n{\"score\": 0.9, \"passed\": true}\n```\nHope this helps!"
+        text_plain = "{\"score\": 0.8, \"passed\": false}"
+        
+        res_markdown = server.extract_json_block(text_with_markdown)
+        res_plain = server.extract_json_block(text_plain)
+        
+        self.assertEqual(res_markdown["score"], 0.9)
+        self.assertTrue(res_markdown["passed"])
+        self.assertEqual(res_plain["score"], 0.8)
+        self.assertFalse(res_plain["passed"])
+        
+        self.assertIsNone(server.extract_json_block("not a json at all"))
+
+    def test_llm_client_gemini_request_format(self):
+        """Test that LLMClient.generate formats Gemini API call correctly"""
+        import os
+        from unittest.mock import patch, MagicMock
+        
+        # Save original API key and mock it
+        orig_key = os.environ.get("GEMINI_API_KEY")
+        os.environ["GEMINI_API_KEY"] = "mock_key"
+        
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "candidates": [{
+                "content": {
+                    "parts": [{"text": "{\"score\": 0.95}"}]
+                }
+            }]
+        }).encode("utf-8")
+        
+        try:
+            with patch("urllib.request.urlopen") as mock_urlopen:
+                mock_urlopen.return_value.__enter__.return_value = mock_response
+                res = server.LLMClient.generate("gemini", "gemini-2.5-flash", "test prompt", system_instruction="sys prompt")
+                
+                self.assertEqual(res, "{\"score\": 0.95}")
+                mock_urlopen.assert_called_once()
+                args, kwargs = mock_urlopen.call_args
+                req = args[0]
+                self.assertEqual(req.full_url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=mock_key")
+                self.assertEqual(req.method, "POST")
+                
+                payload = json.loads(req.data.decode("utf-8"))
+                self.assertEqual(payload["contents"][0]["parts"][0]["text"], "test prompt")
+                self.assertEqual(payload["systemInstruction"]["parts"][0]["text"], "sys prompt")
+        finally:
+            if orig_key is None:
+                os.environ.pop("GEMINI_API_KEY", None)
+            else:
+                os.environ["GEMINI_API_KEY"] = orig_key
+
+    def test_llm_client_ollama_request_format(self):
+        """Test that LLMClient.generate formats Ollama API call correctly"""
+        from unittest.mock import patch, MagicMock
+        
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "choices": [{
+                "message": {"content": "{\"score\": 0.85}"}
+            }]
+        }).encode("utf-8")
+        
+        with patch("urllib.request.urlopen") as mock_urlopen:
+            mock_urlopen.return_value.__enter__.return_value = mock_response
+            res = server.LLMClient.generate("ollama", "llama3", "test prompt", system_instruction="sys prompt")
+            
+            self.assertEqual(res, "{\"score\": 0.85}")
+            mock_urlopen.assert_called_once()
+            args, kwargs = mock_urlopen.call_args
+            req = args[0]
+            self.assertEqual(req.full_url, "http://localhost:11434/v1/chat/completions")
+            self.assertEqual(req.method, "POST")
+            
+            payload = json.loads(req.data.decode("utf-8"))
+            self.assertEqual(payload["model"], "llama3")
+            self.assertEqual(payload["messages"][0]["role"], "system")
+            self.assertEqual(payload["messages"][0]["content"], "sys prompt")
+            self.assertEqual(payload["messages"][1]["role"], "user")
+            self.assertEqual(payload["messages"][1]["content"], "test prompt")
+            self.assertEqual(payload["response_format"]["type"], "json_object")
 
 
 if __name__ == '__main__':

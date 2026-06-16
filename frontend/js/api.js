@@ -84,10 +84,11 @@ export function runMcpRepoScanApi(server, repoRoot) {
  * @param {string} server
  * @param {string} repoRoot
  * @param {string} query
+ * @param {string} model
  */
-export function runGroundedQaApi(server, repoRoot, query) {
+export function runGroundedQaApi(server, repoRoot, query, model) {
   return apiRequest("/api/evaluations/grounded-qa", {
     method: "POST",
-    body: JSON.stringify({ server, repoRoot, query }),
+    body: JSON.stringify({ server, repoRoot, query, model }),
   });
 }

@@ -138,25 +138,32 @@ export const promptProfiles = {
 
 export const modelProfiles = {
   local: {
-    label: "Local Small",
+    label: "Mock (Simulated)",
     score: -0.07,
     tokenMultiplier: 0.82,
     latencyMultiplier: 0.72,
     costPerThousand: 0,
   },
-  mini: {
-    label: "Cloud Mini",
-    score: 0.02,
-    tokenMultiplier: 1,
-    latencyMultiplier: 1,
-    costPerThousand: 0.0004,
+  ollama: {
+    label: "Ollama (Llama 3)",
+    score: -0.05,
+    tokenMultiplier: 0.9,
+    latencyMultiplier: 2.5,
+    costPerThousand: 0,
   },
-  reasoning: {
-    label: "Cloud Reasoning",
-    score: 0.09,
-    tokenMultiplier: 1.28,
-    latencyMultiplier: 1.55,
-    costPerThousand: 0.002,
+  "gemini-flash": {
+    label: "Gemini 2.5 Flash",
+    score: 0.02,
+    tokenMultiplier: 1.0,
+    latencyMultiplier: 0.8,
+    costPerThousand: 0.000075,
+  },
+  "gemini-pro": {
+    label: "Gemini 2.5 Pro",
+    score: 0.08,
+    tokenMultiplier: 1.1,
+    latencyMultiplier: 1.5,
+    costPerThousand: 0.00125,
   },
 };
 
