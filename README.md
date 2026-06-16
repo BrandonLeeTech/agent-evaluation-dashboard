@@ -50,6 +50,35 @@ Agent_Evaluation_Dashboard/
 
 ---
 
+## 🔑 環境變數設定（使用 LLM 功能必填）
+
+若要使用 **Grounded QA 真實 LLM 評估**（Gemini / Ollama），需要設定環境變數。
+
+### 步驟
+
+```bash
+# 1. 複製模板
+cp .env.example .env
+
+# 2. 用編輯器開啟，填入你的金鑰
+open .env          # macOS
+# 或
+nano .env
+```
+
+### `.env` 內容說明
+
+| 變數 | 必填 | 說明 | 取得方式 |
+|---|---|---|---|
+| `GEMINI_API_KEY` | ✅ 使用 Gemini 時 | Gemini API 金鑰 | [Google AI Studio](https://aistudio.google.com/app/apikey) |
+| `OLLAMA_HOST` | ❌ 選填 | Ollama 本地位址，預設 `http://localhost:11434` | 安裝後自動可用 |
+| `PORT` | ❌ 選填 | 後端 Port，預設 `5173` | 自行設定 |
+
+> **安全說明：** `.env` 已加入 `.gitignore`，不會被提交到 git。  
+> 請使用 `.env.example`（空白模板）了解有哪些變數，永遠不要把真實金鑰填進 `.env.example`。
+
+---
+
 ## 🚀 快速開始
 
 ### 方法一：靜態模式（僅前端）
