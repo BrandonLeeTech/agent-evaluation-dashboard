@@ -7,10 +7,9 @@
  */
 
 import { fetchMcpStatus, fetchHistory, postHistory, connectMcpApi, runMcpRepoScanApi, runGroundedQaApi } from './js/api.js';
-import { loadRuns, saveRuns, runBenchmark } from './js/benchmarks.js';
+import { loadRuns, saveRuns } from './js/benchmarks.js';
 import {
   els,
-  getConfig,
   getModelLabel,
   setRunStatus,
   setMcpStatus,
@@ -70,34 +69,6 @@ async function loadHistory() {
 
   selectedRunId = runs[0]?.id || null;
   renderCurrentRun(selectedRunId, runs);
-}
-
-/**
- * 處理模擬基準測試的點擊與執行流程
- */
-function handleRun() {
-  const config = getConfig();
-  setRunStatus("Running", "running");
-  els.runButton.disabled = true;
-
-  window.setTimeout(() => {
-    const run = runBenchmark(config);
-    recordRuns([run]);
-    setRunStatus("Complete", "complete");
-    els.runButton.disabled = false;
-  }, 320);
-}
-
-/**
- * 處理對照組與實驗組 Prompt (v1 / v2) 的快速模擬比對
- */
-function handleCompare() {
-  const base = getConfig({ prompt: "v1" });
-  const candidate = getConfig({ prompt: "v2" });
-  const baseRun = runBenchmark(base);
-  const candidateRun = runBenchmark(candidate);
-  recordRuns([candidateRun, baseRun]);
-  setRunStatus("Compared", "complete");
 }
 
 /**
@@ -200,8 +171,6 @@ async function runGroundedQa() {
 }
 
 // 綁定 UI 事件接頭
-els.runButton.addEventListener("click", handleRun);
-els.compareButton.addEventListener("click", handleCompare);
 els.resetButton.addEventListener("click", resetHistory);
 els.mcpConnectButton.addEventListener("click", connectMcp);
 els.mcpRepoScanButton.addEventListener("click", runMcpRepoScan);

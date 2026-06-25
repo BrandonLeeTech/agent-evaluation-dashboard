@@ -11,14 +11,7 @@
 import { workflowProfiles, promptProfiles, modelProfiles } from './benchmarks.js';
 
 export const els = {
-  workflowSelect: document.getElementById("workflowSelect"),
-  promptSelect: document.getElementById("promptSelect"),
   modelSelect: document.getElementById("modelSelect"),
-  fallbackToggle: document.getElementById("fallbackToggle"),
-  judgeToggle: document.getElementById("judgeToggle"),
-  thresholdInput: document.getElementById("thresholdInput"),
-  runButton: document.getElementById("runButton"),
-  compareButton: document.getElementById("compareButton"),
   resetButton: document.getElementById("resetButton"),
   mcpServerSelect: document.getElementById("mcpServerSelect"),
   mcpRepoPathInput: document.getElementById("mcpRepoPathInput"),
@@ -218,17 +211,13 @@ export function getSelectedCategories() {
     .map((input) => input.value);
 }
 
-// 從當前 UI 中擷取設定物件
-export function getConfig(overrides = {}) {
+// 從當前 UI 中擷取 MCP 設定
+export function getMcpConfig() {
   return {
-    workflow: els.workflowSelect.value,
-    prompt: els.promptSelect.value,
+    server: els.mcpServerSelect.value,
+    repoRoot: els.mcpRepoPathInput.value.trim(),
     model: els.modelSelect.value,
-    fallback: els.fallbackToggle.checked,
-    strictJudge: els.judgeToggle.checked,
-    threshold: Number(els.thresholdInput.value || 80),
-    categories: getSelectedCategories(),
-    ...overrides,
+    query: els.qaTaskInput.value.trim(),
   };
 }
 

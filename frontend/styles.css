@@ -341,7 +341,9 @@ svg {
 .active-model-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
+  min-width: 148px;
   padding: 4px 10px;
   border-radius: 999px;
   background: linear-gradient(135deg, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.10));

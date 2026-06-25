@@ -23,71 +23,6 @@
         </div>
 
         <section class="control-group">
-          <h2>Evaluation Target</h2>
-          <label for="workflowSelect">Workflow</label>
-          <select id="workflowSelect">
-            <option value="testcase">Testcase Generator</option>
-            <option value="qaFallback">QA Workflow + Fallback</option>
-            <option value="agent">Task Agent</option>
-          </select>
-
-          <label for="promptSelect">Prompt Version</label>
-          <select id="promptSelect">
-            <option value="v1">Prompt v1</option>
-            <option value="v2">Prompt v2</option>
-            <option value="v3">Prompt v3</option>
-          </select>
-
-          <label for="modelSelect">Model Preset</label>
-          <select id="modelSelect">
-            <option value="local">Mock (Simulated)</option>
-            <option value="ollama">Ollama (Local Llama 3)</option>
-            <option value="gemini-flash">Gemini 2.5 Flash (Cloud)</option>
-            <option value="gemini-pro">Gemini 2.5 Pro (Cloud)</option>
-            <option value="gpt-4o-mini">GPT-4o Mini (Cloud)</option>
-            <option value="gpt-4o">GPT-4o (Cloud)</option>
-          </select>
-        </section>
-
-        <section class="control-group">
-          <h2>Quality Gates</h2>
-          <div class="toggle-row">
-            <div>
-              <span>Fallback</span>
-              <small>Recovery path</small>
-            </div>
-            <label class="switch">
-              <input id="fallbackToggle" type="checkbox" checked>
-              <span></span>
-            </label>
-          </div>
-
-          <div class="toggle-row">
-            <div>
-              <span>Strict Judge</span>
-              <small>Higher pass bar</small>
-            </div>
-            <label class="switch">
-              <input id="judgeToggle" type="checkbox">
-              <span></span>
-            </label>
-          </div>
-
-          <label for="thresholdInput">Regression Gate</label>
-          <input id="thresholdInput" type="number" min="50" max="99" value="80">
-        </section>
-
-        <section class="control-group">
-          <h2>Benchmark Scope</h2>
-          <div class="checkbox-row">
-            <label><input type="checkbox" name="category" value="requirements" checked> Requirements</label>
-            <label><input type="checkbox" name="category" value="api" checked> API</label>
-            <label><input type="checkbox" name="category" value="ui" checked> UI</label>
-            <label><input type="checkbox" name="category" value="agent" checked> Agent</label>
-          </div>
-        </section>
-
-        <section class="control-group">
           <h2>MCP Connector</h2>
           <label for="mcpServerSelect">Server</label>
           <select id="mcpServerSelect">
@@ -95,6 +30,15 @@
           </select>
           <label for="mcpRepoPathInput">Repo Path</label>
           <input id="mcpRepoPathInput" type="text" value="." placeholder="/Users/name/dev/project">
+          <label for="modelSelect">LLM Model</label>
+          <select id="modelSelect">
+            <option value="local">None (No LLM)</option>
+            <option value="ollama">Ollama (Local Llama 3)</option>
+            <option value="gemini-flash">Gemini 2.5 Flash</option>
+            <option value="gemini-pro">Gemini 2.5 Pro</option>
+            <option value="gpt-4o-mini">GPT-4o Mini</option>
+            <option value="gpt-4o">GPT-4o</option>
+          </select>
           <label for="qaTaskInput">QA Task</label>
           <input id="qaTaskInput" type="text" value="Find missing edge cases in authentication flow" placeholder="Find missing edge cases in login flow">
           <div class="connector-status">
@@ -127,24 +71,6 @@
           </button>
         </section>
 
-        <div class="action-stack">
-          <button id="runButton" class="primary-button" type="button">
-            <span class="button-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false">
-                <path d="M8 5v14l11-7z"></path>
-              </svg>
-            </span>
-            Run Benchmark
-          </button>
-          <button id="compareButton" class="ghost-button" type="button">
-            <span class="button-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false">
-                <path d="M5 7h14v2H5zm0 4h10v2H5zm0 4h14v2H5z"></path>
-              </svg>
-            </span>
-            Compare v1/v2
-          </button>
-        </div>
       </aside>
 
       <main class="workspace">
