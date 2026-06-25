@@ -165,6 +165,27 @@ export const modelProfiles = {
     latencyMultiplier: 1.5,
     costPerThousand: 0.00125,
   },
+  "gpt-4o-mini": {
+    label: "GPT-4o Mini",
+    score: 0.04,
+    tokenMultiplier: 1.0,
+    latencyMultiplier: 0.9,
+    costPerThousand: 0.00015,
+  },
+  "gpt-4o": {
+    label: "GPT-4o",
+    score: 0.10,
+    tokenMultiplier: 1.2,
+    latencyMultiplier: 1.4,
+    costPerThousand: 0.005,
+  },
+  "mcp-scan": {
+    label: "MCP Scan (No LLM)",
+    score: 0,
+    tokenMultiplier: 1,
+    latencyMultiplier: 1,
+    costPerThousand: 0,
+  },
 };
 
 export const failureReasons = [

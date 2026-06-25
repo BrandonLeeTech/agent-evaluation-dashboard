@@ -290,6 +290,47 @@ class TestServer(unittest.TestCase):
             self.assertEqual(payload["messages"][1]["content"], "test prompt")
             self.assertEqual(payload["response_format"]["type"], "json_object")
 
+    def test_llm_client_openai_request_format(self):
+        """Test that LLMClient.generate formats OpenAI API call correctly"""
+        import os
+        from unittest.mock import patch, MagicMock
+        
+        orig_key = os.environ.get("OPENAI_API_KEY")
+        os.environ["OPENAI_API_KEY"] = "mock_openai_key"
+        
+        mock_response = MagicMock()
+        mock_response.read.return_value = json.dumps({
+            "choices": [{
+                "message": {"content": "{\"score\": 0.92}"}
+            }]
+        }).encode("utf-8")
+        
+        try:
+            with patch("urllib.request.urlopen") as mock_urlopen:
+                mock_urlopen.return_value.__enter__.return_value = mock_response
+                res = server.LLMClient.generate("openai", "gpt-4o-mini", "test prompt", system_instruction="sys prompt")
+                
+                self.assertEqual(res, "{\"score\": 0.92}")
+                mock_urlopen.assert_called_once()
+                args, kwargs = mock_urlopen.call_args
+                req = args[0]
+                self.assertEqual(req.full_url, "https://api.openai.com/v1/chat/completions")
+                self.assertEqual(req.method, "POST")
+                self.assertEqual(req.headers.get("Authorization"), "Bearer mock_openai_key")
+                
+                payload = json.loads(req.data.decode("utf-8"))
+                self.assertEqual(payload["model"], "gpt-4o-mini")
+                self.assertEqual(payload["messages"][0]["role"], "system")
+                self.assertEqual(payload["messages"][0]["content"], "sys prompt")
+                self.assertEqual(payload["messages"][1]["role"], "user")
+                self.assertEqual(payload["messages"][1]["content"], "test prompt")
+                self.assertEqual(payload["response_format"]["type"], "json_object")
+        finally:
+            if orig_key is None:
+                os.environ.pop("OPENAI_API_KEY", None)
+            else:
+                os.environ["OPENAI_API_KEY"] = orig_key
+
 
 if __name__ == '__main__':
     unittest.main()

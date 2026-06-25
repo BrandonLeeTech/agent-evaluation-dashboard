@@ -58,6 +58,8 @@ def sanitize_secrets(text):
         return text
     text = re.sub(r"key=[a-zA-Z0-9_\-]+", "key=[REDACTED]", text)
     text = re.sub(r"AIzaSy[a-zA-Z0-9_\-]{33}", "AIzaSy[REDACTED]", text)
+    text = re.sub(r"sk-proj-[a-zA-Z0-9_\-]{20,}", "sk-proj-[REDACTED]", text)
+    text = re.sub(r"sk-[a-zA-Z0-9_\-]{20,}", "sk-[REDACTED]", text)
     return text
 
 
@@ -149,6 +151,49 @@ class LLMClient:
                 raise RuntimeError(f"Ollama API error ({e.code}): {err_content}") from e
             except Exception as e:
                 raise RuntimeError(f"Ollama connection failed (is Ollama running locally?): {str(e)}") from e
+        elif provider == "openai":
+            api_key = os.environ.get("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY is not set in environment variables.")
+            
+            url = "https://api.openai.com/v1/chat/completions"
+            
+            messages = []
+            if system_instruction:
+                messages.append({"role": "system", "content": system_instruction})
+            messages.append({"role": "user", "content": prompt})
+            
+            payload = {
+                "model": model,
+                "messages": messages,
+                "response_format": {"type": "json_object"}
+            }
+            
+            req_body = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=req_body,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {api_key}"
+                },
+                method="POST"
+            )
+            
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as response:
+                    resp_data = json.loads(response.read().decode("utf-8"))
+                    choices = resp_data.get("choices", [])
+                    if not choices:
+                        raise ValueError("OpenAI response returned no choices.")
+                    text = choices[0].get("message", {}).get("content", "")
+                    return text
+            except urllib.error.HTTPError as e:
+                err_content = e.read().decode("utf-8")
+                cleaned_err = sanitize_secrets(err_content)
+                raise RuntimeError(f"OpenAI API error ({e.code}): {cleaned_err}") from e
+            except Exception as e:
+                raise RuntimeError(f"OpenAI connection failed: {sanitize_secrets(str(e))}") from e
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
 
@@ -611,7 +656,7 @@ def run_repo_scan(server_name=None, repo_root=None):
         "config": {
             "workflow": "mcpRepo",
             "prompt": "mcp",
-            "model": "local",
+            "model": "mcp-scan",
             "fallback": False,
             "strictJudge": False,
             "threshold": 80,
@@ -670,6 +715,12 @@ def run_grounded_qa_evaluation(server_name=None, repo_root=None, query=None, mod
     elif model_preset == "gemini-pro":
         provider = "gemini"
         model_name = "gemini-2.5-pro"
+    elif model_preset == "gpt-4o-mini":
+        provider = "openai"
+        model_name = "gpt-4o-mini"
+    elif model_preset == "gpt-4o":
+        provider = "openai"
+        model_name = "gpt-4o"
         
     if provider and inspected_count > 0:
         inspected_files = context.get("inspected_files", [])

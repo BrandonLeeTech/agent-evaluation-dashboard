@@ -11,6 +11,7 @@ import { loadRuns, saveRuns, runBenchmark } from './js/benchmarks.js';
 import {
   els,
   getConfig,
+  getModelLabel,
   setRunStatus,
   setMcpStatus,
   renderMcpTools,
@@ -22,6 +23,14 @@ import {
 // 初始化全域狀態
 let runs = loadRuns();
 let selectedRunId = runs[0]?.id || null;
+
+/**
+ * 更新頂部工具列的「目前使用模型」即時 Badge
+ */
+function updateActiveModelBadge() {
+  const label = getModelLabel(els.modelSelect.value);
+  document.getElementById('activeModelLabel').textContent = label;
+}
 
 /**
  * 將本次新增的 runs 同步到本地快取與後端 SQLite。
@@ -198,6 +207,9 @@ els.mcpConnectButton.addEventListener("click", connectMcp);
 els.mcpRepoScanButton.addEventListener("click", runMcpRepoScan);
 els.groundedQaButton.addEventListener("click", runGroundedQa);
 
+// 即時更新「目前使用模型」Badge（監聽 dropdown 變更）
+els.modelSelect.addEventListener("change", updateActiveModelBadge);
+
 els.historyTable.addEventListener("click", (event) => {
   const row = event.target.closest("tr[data-run-id]");
   if (!row) return;
@@ -206,6 +218,7 @@ els.historyTable.addEventListener("click", (event) => {
 });
 
 // 初始化頁面內容
+updateActiveModelBadge();
 await loadHistory();
 void loadMcpStatus();
 
