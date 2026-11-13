@@ -79,6 +79,13 @@ export function runMcpRepoScanApi(server, repoRoot) {
   });
 }
 
+export function runRepoBenchmarkApi(server, repoRoot, model) {
+  return apiRequest("/api/evaluations/repo-benchmark", {
+    method: "POST",
+    body: JSON.stringify({ server, repoRoot, model }),
+  });
+}
+
 /**
  * 執行基於真實 repo evidence 的 QA agent 評估
  * @param {string} server

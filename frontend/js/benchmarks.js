@@ -95,6 +95,7 @@ export const benchmarkTasks = [
 ];
 
 export const workflowProfiles = {
+  repoBenchmark: { label: "Repository Completeness", baseScore: 0, hallucinationRisk: 0, retryRisk: 0, tokenBase: 0, latencyBase: 0 },
   testcase: {
     label: "Testcase Generator",
     baseScore: 0.78,
@@ -130,6 +131,7 @@ export const workflowProfiles = {
 };
 
 export const promptProfiles = {
+  "repo-checklist": { label: "Evidence Based Checklist", score: 0, tokens: 0, hallucination: 0 },
   v1: { label: "Prompt v1", score: 0, tokens: 0, hallucination: 0 },
   v2: { label: "Prompt v2", score: 0.06, tokens: 140, hallucination: -0.025 },
   v3: { label: "Prompt v3", score: 0.035, tokens: 250, hallucination: -0.04 },
@@ -138,7 +140,7 @@ export const promptProfiles = {
 
 export const modelProfiles = {
   local: {
-    label: "Mock (Simulated)",
+    label: "No LLM (Local Checks)",
     score: -0.07,
     tokenMultiplier: 0.82,
     latencyMultiplier: 0.72,

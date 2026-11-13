@@ -121,6 +121,19 @@ button {
   font-weight: 650;
 }
 
+.benchmark-ai-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500 !important;
+}
+
+.benchmark-ai-option input {
+  width: 16px;
+  height: 16px;
+  accent-color: #7dd3fc;
+}
+
 select,
 input[type="text"],
 input[type="number"] {
@@ -633,6 +646,13 @@ svg {
   text-transform: uppercase;
 }
 
+.task-title small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+}
+
 .result-status {
   min-height: 28px;
   padding: 0 10px;
@@ -646,6 +666,11 @@ svg {
 .result-status.fail {
   color: var(--red);
   background: #fbe8e7;
+}
+
+.result-status.neutral {
+  color: var(--muted);
+  background: #eef2f7;
 }
 
 .score-cell {

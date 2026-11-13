@@ -12,12 +12,14 @@ import { workflowProfiles, promptProfiles, modelProfiles } from './benchmarks.js
 
 export const els = {
   modelSelect: document.getElementById("modelSelect"),
+  repoBenchmarkAiToggle: document.getElementById("repoBenchmarkAiToggle"),
   resetButton: document.getElementById("resetButton"),
   mcpServerSelect: document.getElementById("mcpServerSelect"),
   mcpRepoPathInput: document.getElementById("mcpRepoPathInput"),
   qaTaskInput: document.getElementById("qaTaskInput"),
   mcpConnectButton: document.getElementById("mcpConnectButton"),
   mcpRepoScanButton: document.getElementById("mcpRepoScanButton"),
+  repoBenchmarkButton: document.getElementById("repoBenchmarkButton"),
   groundedQaButton: document.getElementById("groundedQaButton"),
   mcpStatusDot: document.getElementById("mcpStatusDot"),
   mcpStatusText: document.getElementById("mcpStatusText"),
@@ -69,7 +71,7 @@ export function formatDate(iso) {
 
 // 格式化費用
 export function formatCost(cost) {
-  if (typeof cost !== 'number') return "$0.00000";
+  if (typeof cost !== 'number') return "—";
   if (cost === 0) return "$0.00000";
   return `$${cost.toFixed(5)}`;
 }
@@ -85,6 +87,11 @@ export function getPromptLabel(key) {
 
 export function getModelLabel(key) {
   return modelProfiles[key]?.label || key;
+}
+
+export function getRunModelLabel(run) {
+  if (run.evaluation?.model) return run.evaluation.model;
+  return getModelLabel(run.config?.model);
 }
 
 // 更新當前評估執行狀態狀態列
@@ -137,6 +144,7 @@ export function renderMcpEvidence(evidence) {
     qaFindings: evidence.qaContext?.findings,
     qaSourceMatches: evidence.qaContext?.source_matches?.slice(0, 5),
     qaTestMatches: evidence.qaContext?.test_matches?.slice(0, 5),
+    benchmark: evidence.benchmark,
   };
   els.mcpOutput.textContent = JSON.stringify(compact, null, 2);
 }
@@ -154,15 +162,23 @@ export function renderResultRow(result) {
     ? tags.map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")
     : '<span class="small-muted">clean</span>';
 
+  const status = result.status === "unassessed" || result.status === "not_requested"
+    ? "Unassessed"
+    : result.passed ? "Pass" : "Review";
+  const statusClass = result.status === "unassessed" || result.status === "not_requested"
+    ? "neutral"
+    : result.passed ? "pass" : "fail";
+  const evidence = (result.evidence || []).map(escapeHtml).join(", ");
   return `
     <div class="result-row">
       <div class="task-title">
         <strong>${escapeHtml(result.title)}</strong>
-        <span>${escapeHtml(result.taskId)} · ${escapeHtml(result.category)}</span>
+        <span>${escapeHtml(result.taskId)} · ${escapeHtml(result.source || result.category)} · ${result.weight || 0}% weight</span>
+        <small>${escapeHtml(result.reason || "")}${evidence ? ` · Evidence: ${evidence}` : ""}</small>
       </div>
-      <span class="result-status ${result.passed ? "pass" : "fail"}">${result.passed ? "Pass" : "Fail"}</span>
-      <span class="score-cell">${Math.round(result.score * 100)}%</span>
-      <span class="small-muted">${(result.latency / 1000).toFixed(2)}s · ${result.tokens} tok</span>
+      <span class="result-status ${statusClass}">${status}</span>
+      <span class="score-cell">${result.score == null ? "—" : `${Math.round(result.score * 100)}%`}</span>
+      <span class="small-muted">${result.latency ? `${(result.latency / 1000).toFixed(2)}s · ` : ""}${result.tokens || 0} tok</span>
       <div class="tag-list">${tagHtml}</div>
     </div>
   `;
@@ -171,26 +187,28 @@ export function renderResultRow(result) {
 // 渲染失敗項目原因分析
 export function renderFailureAnalysis(run) {
   try {
-    const failures = run.results.filter((result) => !result.passed);
+    const failures = run.results.filter((result) => !result.passed || result.status === "unassessed" || result.status === "not_requested");
     if (!failures.length) {
       els.failureList.innerHTML = `
         <div class="empty-copy">
-          <strong>No failures</strong>
-          <span>All selected benchmark tasks passed.</span>
+          <strong>No review items</strong>
+          <span>All assessed checks passed.</span>
         </div>
       `;
       return;
     }
 
     els.failureList.innerHTML = failures.map((failure) => {
-      const severity = failure.hallucinated ? "high" : failure.score < 0.62 ? "medium" : "low";
+      const severity = failure.status === "unassessed" || failure.status === "not_requested"
+        ? "low"
+        : failure.hallucinated ? "high" : failure.score < 0.62 ? "medium" : "low";
       return `
         <div class="analysis-item">
           <header>
             <span>${escapeHtml(failure.reason)}</span>
             <span class="severity-${severity}">${severity}</span>
           </header>
-          <p>${escapeHtml(failure.taskId)}: ${escapeHtml(failure.risk)}. Score ${Math.round(failure.score * 100)}%, fallback ${failure.fallbackTriggered ? "triggered" : "not triggered"}.</p>
+          <p>${escapeHtml(failure.taskId)}: ${escapeHtml(failure.reason || failure.risk || "Not assessed")}. ${failure.score == null ? "No score" : `Score ${Math.round(failure.score * 100)}%`}.</p>
         </div>
       `;
     }).join("");
@@ -262,18 +280,26 @@ export function renderCurrentRun(selectedRunId, runs) {
 
     const { metrics, config } = run;
     els.successMetric.textContent = `${metrics.successRate}%`;
-    els.hallucinationMetric.textContent = `${metrics.hallucinationRate}%`;
+    const coverage = metrics.coverage ?? 100;
+    els.hallucinationMetric.textContent = `${coverage}%`;
     els.latencyMetric.textContent = `${(metrics.avgLatency / 1000).toFixed(2)}s`;
     els.costMetric.textContent = formatCost(metrics.cost);
     els.successMeter.style.width = `${metrics.successRate}%`;
-    els.hallucinationMeter.style.width = `${metrics.hallucinationRate}%`;
+    els.hallucinationMeter.style.width = `${coverage}%`;
     els.latencyNote.textContent = `${metrics.passed}/${metrics.total} tasks passed`;
-    els.tokenNote.textContent = `${metrics.tokens.toLocaleString()} tokens`;
-    els.runMeta.textContent = `${getWorkflowLabel(config.workflow)} · ${getPromptLabel(config.prompt)} · ${getModelLabel(config.model)}`;
+    els.tokenNote.textContent = `${metrics.tokens.toLocaleString()} tokens${run.evaluation?.usage?.estimated ? " (estimated)" : ""}`;
+    const modelLabel = getRunModelLabel(run);
+    const aiStatus = run.evaluation?.modelStatus;
+    els.runMeta.textContent = `${getWorkflowLabel(config.workflow)} · ${getPromptLabel(config.prompt)} · ${modelLabel}${aiStatus ? ` · AI ${aiStatus}` : ""}`;
     els.failureMeta.textContent = `${metrics.failed} failed · ${metrics.fallbackRate}% fallback`;
 
-    els.gateBadge.textContent = metrics.gatePassed ? "Gate Passed" : "Gate Failed";
-    els.gateBadge.className = `gate-badge ${metrics.gatePassed ? "pass" : "fail"}`;
+    if (coverage < 100) {
+      els.gateBadge.textContent = `Partial · ${coverage}%`;
+      els.gateBadge.className = "gate-badge neutral";
+    } else {
+      els.gateBadge.textContent = metrics.gatePassed ? "Gate Passed" : "Gate Failed";
+      els.gateBadge.className = `gate-badge ${metrics.gatePassed ? "pass" : "fail"}`;
+    }
 
     els.resultList.className = "result-list";
     els.resultList.innerHTML = run.results.map(renderResultRow).join("");
@@ -307,7 +333,7 @@ export function renderHistory(runs, selectedRunId) {
 
     els.historyTable.innerHTML = runs.map((run) => {
       const workflow = escapeHtml(getWorkflowLabel(run.config?.workflow));
-      const model = escapeHtml(getModelLabel(run.config?.model));
+      const model = escapeHtml(getRunModelLabel(run));
       const selected = run.id === selectedRunId ? "selected" : "";
       return `
         <tr class="${selected}" data-run-id="${run.id}">
@@ -315,9 +341,9 @@ export function renderHistory(runs, selectedRunId) {
           <td>${workflow}</td>
           <td>${model}</td>
           <td>${run.metrics?.successRate ?? 0}%</td>
-          <td>${run.metrics?.hallucinationRate ?? 0}%</td>
-          <td>${run.metrics?.fallbackRate ?? 0}%</td>
-          <td>${formatCost(run.metrics?.cost ?? 0)}</td>
+          <td>${run.metrics?.coverage ?? 100}%</td>
+          <td>${escapeHtml(run.evaluation?.modelStatus || "—")}</td>
+          <td>${formatCost(run.metrics?.cost)}</td>
           <td>${run.metrics?.gatePassed ? "Pass" : "Fail"}</td>
         </tr>
       `;

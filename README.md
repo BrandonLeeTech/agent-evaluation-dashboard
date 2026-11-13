@@ -71,7 +71,9 @@ nano .env
 | 變數 | 必填 | 說明 | 取得方式 |
 |---|---|---|---|
 | `GEMINI_API_KEY` | ✅ 使用 Gemini 時 | Gemini API 金鑰 | [Google AI Studio](https://aistudio.google.com/app/apikey) |
-| `OLLAMA_HOST` | ❌ 選填 | Ollama 本地位址，預設 `http://localhost:11434` | 安裝後自動可用 |
+| `OPENAI_API_KEY` | ✅ 使用 OpenAI 時 | OpenAI API 金鑰 | OpenAI Platform |
+| `OLLAMA_HOST` | ❌ 選填 | Ollama 本地位址，預設 `http://localhost:11434` | 安裝並啟動 Ollama |
+| `OLLAMA_MODEL` | ❌ 選填 | Ollama 模型名稱，預設 `llama3` | 使用 `ollama pull` 下載模型 |
 | `PORT` | ❌ 選填 | 後端 Port，預設 `5173` | 自行設定 |
 
 > **安全說明：** `.env` 已加入 `.gitignore`，不會被提交到 git。  
@@ -104,6 +106,36 @@ python3 backend/server.py
 ```
 http://127.0.0.1:5173
 ```
+
+## 📖 使用方式
+
+### 執行 Repository Benchmark
+
+1. 使用後端模式啟動伺服器，設定 Repo Path。
+2. 預設只跑本機檢查；選 Gemini、OpenAI 或 Ollama 後，再勾選 **Include AI semantic checks** 才會呼叫 AI。
+3. 點擊 **Run Repo Benchmark**，查看 0–100 分、評估覆蓋率、各項證據和 token 用量。
+4. 在 **Run History** 點選過去紀錄，查看該次結果。
+
+本機檢查評估啟動文件、測試存在、CI 與基本依賴／秘密管理訊號，不會呼叫模型。勾選 AI 後，系統用一次 API 呼叫檢查測試品質、文件與實作一致性、錯誤處理與維護訊號；送出的 repo 證據有長度上限，並驗證模型引用的檔案路徑。AI 呼叫失敗或證據無法核對時，保留本機分數，AI 項目標成未評估並降低覆蓋率，不會補上模擬分數。成本為公開標準 token 價格的估算，實際帳單可能因帳戶方案或折扣不同。
+
+### 掃描 Repository
+
+1. 先依「MCP 模式」啟動後端，並開啟 `http://127.0.0.1:5173`。
+2. 在左側 **MCP Connector** 的 **Repo Path** 輸入要掃描的 repo 路徑。輸入 `.` 代表啟動本專案；其他 repo 請輸入完整路徑。
+3. 點擊 **Connect MCP**。連線成功後會顯示可用工具。
+4. 點擊 **Run Repo Scan**，查看 repo 摘要、品質訊號、最新證據和失敗分析。
+
+### 執行 Grounded QA
+
+1. 設定 repo 路徑並點擊 **Connect MCP**。
+2. 在 **LLM Model** 選擇模型，在 **QA Task** 輸入要調查的問題。
+3. 點擊 **Run Grounded QA**。系統會從 repo 擷取相關程式碼與測試，再用所選模型評估並顯示依據。
+
+Gemini 和 OpenAI 需要在 `.env` 設定對應 API 金鑰；Ollama 需要先在本機啟動 Ollama，並確保選用模型已下載。選擇 **None (No LLM)** 時只取得 repo 證據，不會呼叫外部 LLM。API 金鑰缺少或 LLM 請求失敗時，Grounded QA 會顯示警告或錯誤訊息。
+
+### 歷史紀錄
+
+透過後端執行時，評估紀錄會保存於專案的 `data/eval_history.sqlite3`，並在瀏覽器載入；後端無法使用時前端會改用 localStorage。頁面右上角的重設按鈕會清除目前前端顯示及瀏覽器快取的紀錄；它不會刪除 SQLite 中已保存的紀錄。
 
 ---
 

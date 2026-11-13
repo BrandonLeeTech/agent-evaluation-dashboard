@@ -218,8 +218,127 @@ class TestServer(unittest.TestCase):
         self.assertTrue(res_markdown["passed"])
         self.assertEqual(res_plain["score"], 0.8)
         self.assertFalse(res_plain["passed"])
-        
         self.assertIsNone(server.extract_json_block("not a json at all"))
+
+    def test_calculate_repo_score_ignores_unassessed_weight(self):
+        score = server.calculate_repo_score([
+            {"status": "assessed", "weight": 20, "score": 1},
+            {"status": "assessed", "weight": 10, "score": 0.5},
+            {"status": "unassessed", "weight": 70, "score": None},
+        ])
+        self.assertEqual(score["score"], 83)
+        self.assertEqual(score["coverage"], 30)
+
+    def test_repo_benchmark_local_mode_skips_llm_and_reports_partial_coverage(self):
+        from unittest.mock import patch
+
+        class FakeClient:
+            def call_tool(self, name, arguments):
+                if name == "repo_summary":
+                    data = {"root": "/repo", "file_count": 4, "extensions": {".py": 2},
+                            "top_level_files": ["README.md", "server.py", ".gitignore"]}
+                elif name == "scan_repo_quality":
+                    data = {"root": "/repo", "readme_files": ["README.md"],
+                            "dependency_files": ["requirements.txt"], "env_examples": [],
+                            "test_files": ["tests/test_sample.py"], "ci_files": [".github/workflows/ci.yml"],
+                            "issues": []}
+                else:
+                    raise AssertionError(f"Unexpected MCP tool: {name}")
+                return {"structuredContent": data}
+
+            def status(self):
+                return {"name": "local-repo", "running": True}
+
+        with patch.object(server.registry, "get", return_value=FakeClient()), \
+             patch.object(server.LLMClient, "generate") as generate:
+            result = server.run_repo_benchmark(repo_root=None, model_preset="local")
+
+        run = result["run"]
+        self.assertEqual(run["metrics"]["coverage"], 60)
+        self.assertEqual(run["evaluation"]["modelStatus"], "not_requested")
+        self.assertEqual(run["evaluation"]["aiCallCount"], 0)
+        self.assertEqual(run["metrics"]["cost"], 0)
+        self.assertEqual(sum(item["status"] == "not_requested" for item in run["results"]), 3)
+        generate.assert_not_called()
+
+    def test_repo_benchmark_ai_failure_keeps_local_score_without_fake_fallback(self):
+        from unittest.mock import patch
+
+        class FakeClient:
+            def call_tool(self, name, arguments):
+                if name == "repo_summary":
+                    data = {"root": "/repo", "file_count": 4, "extensions": {".py": 2},
+                            "top_level_files": ["README.md", "server.py", ".gitignore"]}
+                elif name == "scan_repo_quality":
+                    data = {"root": "/repo", "readme_files": ["README.md"],
+                            "dependency_files": ["requirements.txt"], "env_examples": [],
+                            "test_files": ["tests/test_sample.py"], "ci_files": [".github/workflows/ci.yml"],
+                            "issues": []}
+                elif name == "inspect_qa_context":
+                    data = {"inspected_files": [{"path": "server.py", "kind": "source",
+                                                  "content_excerpt": "def run(): return True"}]}
+                elif name == "read_file":
+                    data = {"path": "README.md", "content": "Run with python server.py"}
+                else:
+                    raise AssertionError(f"Unexpected MCP tool: {name}")
+                return {"structuredContent": data}
+
+            def status(self):
+                return {"name": "local-repo", "running": True}
+
+        with patch.object(server.registry, "get", return_value=FakeClient()), \
+             patch.object(server.LLMClient, "generate", side_effect=RuntimeError("API unavailable")) as generate:
+            result = server.run_repo_benchmark(repo_root=None, model_preset="gpt-4o-mini")
+
+        run = result["run"]
+        self.assertEqual(run["metrics"]["coverage"], 60)
+        self.assertEqual(run["evaluation"]["modelStatus"], "failed")
+        self.assertEqual(run["evaluation"]["aiCallCount"], 1)
+        self.assertTrue(all(item["score"] is None for item in run["results"] if item["source"] == "ai"))
+        generate.assert_called_once()
+
+    def test_repo_benchmark_ai_success_records_scores_and_usage(self):
+        from unittest.mock import patch
+
+        class FakeClient:
+            def call_tool(self, name, arguments):
+                if name == "repo_summary":
+                    data = {"root": "/repo", "file_count": 4, "extensions": {".py": 2},
+                            "top_level_files": ["README.md", "server.py", ".gitignore"]}
+                elif name == "scan_repo_quality":
+                    data = {"root": "/repo", "readme_files": ["README.md"],
+                            "dependency_files": ["requirements.txt"], "env_examples": [],
+                            "test_files": ["tests/test_sample.py"], "ci_files": [".github/workflows/ci.yml"],
+                            "issues": []}
+                elif name == "inspect_qa_context":
+                    data = {"inspected_files": [{"path": "server.py", "kind": "source",
+                                                  "content_excerpt": "def run(): return True"},
+                                                 {"path": "tests/test_sample.py", "kind": "test",
+                                                  "content_excerpt": "def test_run(): assert run()"}]}
+                elif name == "read_file":
+                    data = {"path": "README.md", "content": "Run with python server.py"}
+                else:
+                    raise AssertionError(f"Unexpected MCP tool: {name}")
+                return {"structuredContent": data}
+
+            def status(self):
+                return {"name": "local-repo", "running": True}
+
+        checks = [{"id": check_id, "score": 1, "reason": "Evidence supports the criterion", "evidence": ["server.py"]}
+                  for check_id in ("test_quality", "docs_consistency", "maintenance")]
+        llm_response = {"text": json.dumps({"checks": checks}),
+                        "usage": {"inputTokens": 500, "outputTokens": 100, "totalTokens": 600}}
+        with patch.object(server.registry, "get", return_value=FakeClient()), \
+             patch.object(server.LLMClient, "generate", return_value=llm_response) as generate:
+            result = server.run_repo_benchmark(repo_root=None, model_preset="gpt-4o-mini")
+
+        run = result["run"]
+        self.assertEqual(run["metrics"]["coverage"], 100)
+        self.assertEqual(run["metrics"]["repoScore"], 100)
+        self.assertEqual(run["metrics"]["tokens"], 600)
+        self.assertEqual(run["evaluation"]["modelStatus"], "complete")
+        self.assertEqual(run["evaluation"]["aiCallCount"], 1)
+        generate.assert_called_once()
 
     def test_llm_client_gemini_request_format(self):
         """Test that LLMClient.generate formats Gemini API call correctly"""

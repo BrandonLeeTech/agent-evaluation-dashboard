@@ -6,7 +6,7 @@
  *   - 綁定 DOM 事件監聽器並協調功能運作
  */
 
-import { fetchMcpStatus, fetchHistory, postHistory, connectMcpApi, runMcpRepoScanApi, runGroundedQaApi } from './js/api.js';
+import { fetchMcpStatus, fetchHistory, postHistory, connectMcpApi, runMcpRepoScanApi, runRepoBenchmarkApi, runGroundedQaApi } from './js/api.js';
 import { loadRuns, saveRuns } from './js/benchmarks.js';
 import {
   els,
@@ -29,6 +29,8 @@ let selectedRunId = runs[0]?.id || null;
 function updateActiveModelBadge() {
   const label = getModelLabel(els.modelSelect.value);
   document.getElementById('activeModelLabel').textContent = label;
+  els.repoBenchmarkAiToggle.disabled = els.modelSelect.value === "local";
+  if (els.repoBenchmarkAiToggle.disabled) els.repoBenchmarkAiToggle.checked = false;
 }
 
 /**
@@ -143,6 +145,38 @@ async function runMcpRepoScan() {
   }
 }
 
+async function runRepoBenchmark() {
+  const server = els.mcpServerSelect.value;
+  const repoRoot = els.mcpRepoPathInput.value.trim();
+  const model = els.repoBenchmarkAiToggle.checked ? els.modelSelect.value : "local";
+  setRunStatus("Repo Benchmark Running", "running");
+  setMcpStatus("Checking repository", "running");
+  els.repoBenchmarkButton.disabled = true;
+  try {
+    const payload = await runRepoBenchmarkApi(server, repoRoot, model);
+    recordRuns([payload.run]);
+    renderMcpEvidence({
+      server: payload.evidence.server,
+      summary: payload.evidence.summary,
+      quality: payload.evidence.quality,
+      benchmark: {
+        metrics: payload.run.metrics,
+        evaluation: payload.run.evaluation,
+        checks: payload.run.results,
+      },
+    });
+    const incomplete = ["failed", "partial"].includes(payload.run.evaluation.modelStatus);
+    setRunStatus(incomplete ? "Benchmark Partial" : "Benchmark Complete", incomplete ? "running" : "complete");
+    setMcpStatus("Benchmark complete", "online");
+  } catch (error) {
+    setRunStatus("Benchmark Failed", "running");
+    setMcpStatus("Benchmark failed", "offline");
+    els.mcpOutput.textContent = error.message;
+  } finally {
+    els.repoBenchmarkButton.disabled = false;
+  }
+}
+
 /**
  * 以真實 repo evidence 評估 QA agent 任務，不執行測試、不呼叫外部 AI。
  */
@@ -174,6 +208,7 @@ async function runGroundedQa() {
 els.resetButton.addEventListener("click", resetHistory);
 els.mcpConnectButton.addEventListener("click", connectMcp);
 els.mcpRepoScanButton.addEventListener("click", runMcpRepoScan);
+els.repoBenchmarkButton.addEventListener("click", runRepoBenchmark);
 els.groundedQaButton.addEventListener("click", runGroundedQa);
 
 // 即時更新「目前使用模型」Badge（監聽 dropdown 變更）

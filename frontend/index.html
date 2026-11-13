@@ -39,6 +39,10 @@
             <option value="gpt-4o-mini">GPT-4o Mini</option>
             <option value="gpt-4o">GPT-4o</option>
           </select>
+          <label class="benchmark-ai-option">
+            <input id="repoBenchmarkAiToggle" type="checkbox">
+            Include AI semantic checks (one API call)
+          </label>
           <label for="qaTaskInput">QA Task</label>
           <input id="qaTaskInput" type="text" value="Find missing edge cases in authentication flow" placeholder="Find missing edge cases in login flow">
           <div class="connector-status">
@@ -52,6 +56,9 @@
               </svg>
             </span>
             Connect MCP
+          </button>
+          <button id="repoBenchmarkButton" class="primary-button" type="button">
+            Run Repo Benchmark
           </button>
           <button id="mcpRepoScanButton" class="ghost-button" type="button">
             <span class="button-icon" aria-hidden="true">
@@ -83,7 +90,7 @@
             <span id="runStatus" class="status-pill">Ready</span>
             <div class="active-model-badge" title="Currently selected model">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-              <span id="activeModelLabel">Mock (Simulated)</span>
+              <span id="activeModelLabel">No LLM (Local Checks)</span>
             </div>
             <button id="resetButton" class="icon-button" type="button" title="Reset history" aria-label="Reset history">
               <svg viewBox="0 0 24 24" focusable="false">
@@ -95,14 +102,14 @@
 
         <section class="metric-grid" aria-label="Current run metrics">
           <article class="metric-card">
-            <span>Success Rate</span>
+            <span>Repo Score</span>
             <strong id="successMetric">--</strong>
             <div class="meter"><span id="successMeter"></span></div>
           </article>
           <article class="metric-card">
-            <span>Hallucination</span>
+            <span>Assessment Coverage</span>
             <strong id="hallucinationMetric">--</strong>
-            <div class="meter danger"><span id="hallucinationMeter"></span></div>
+            <div class="meter"><span id="hallucinationMeter"></span></div>
           </article>
           <article class="metric-card">
             <span>Avg Latency</span>
@@ -110,7 +117,7 @@
             <div class="metric-note" id="latencyNote">No run yet</div>
           </article>
           <article class="metric-card">
-            <span>Token Cost</span>
+            <span>Estimated API Cost</span>
             <strong id="costMetric">--</strong>
             <div class="metric-note" id="tokenNote">0 tokens</div>
           </article>
@@ -188,9 +195,9 @@
                   <th>Run</th>
                   <th>Workflow</th>
                   <th>Model</th>
-                  <th>Success</th>
-                  <th>Hallucination</th>
-                  <th>Fallback</th>
+                  <th>Score</th>
+                  <th>Coverage</th>
+                  <th>AI Status</th>
                   <th>Cost</th>
                   <th>Gate</th>
                 </tr>
